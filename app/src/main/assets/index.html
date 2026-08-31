@@ -7,6 +7,12 @@
 <style>
 :root {
   color-scheme: light;
+  --app-font-scale: 1;
+  --panel-gap: 12px;
+  --panel-padding: 14px 14px 12px;
+  --button-pad-x: 12px;
+  --button-pad-y: 10px;
+  --control-gap: 10px;
   --bg: #f3f7fb;
   --surface: #ffffff;
   --surface-alt: #f8fafc;
@@ -61,6 +67,102 @@ body.dark {
   --toggle: #1d2a39;
 }
 
+body[data-appearance-theme="default"] {
+  color-scheme: dark;
+  --bg: #280137;
+  --surface: #1c0c2b;
+  --surface-alt: #2d1238;
+  --surface-soft: #360f3d;
+  --text: #f8f3ff;
+  --muted: #d4cae8;
+  --line: rgba(192, 192, 192, 0.35);
+  --line-strong: rgba(255, 215, 0, 0.78);
+  --accent: #BF40BF;
+  --accent-strong: #74207B;
+  --accent-soft: rgba(191, 64, 191, 0.18);
+  --success: #C0C0C0;
+  --warning: #FFD700;
+  --danger: #ff7f7f;
+  --shadow: 0 14px 28px rgba(14, 6, 19, 0.42);
+  --panel-radius: 18px;
+  --control-radius: 12px;
+  --ball-bg: linear-gradient(180deg, #3a174a 0%, #250d32 100%);
+  --ball-text: #fff9e6;
+  --button-text: #180719;
+  --chip-bg: rgba(192, 192, 192, 0.10);
+  --chip-border: rgba(255, 215, 0, 0.35);
+  --track: rgba(192, 192, 192, 0.18);
+  --toggle: rgba(255, 215, 0, 0.16);
+}
+
+body[data-appearance-theme="high-contrast"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #101010;
+  --surface-alt: #171717;
+  --surface-soft: #1d1d1d;
+  --text: #ffffff;
+  --muted: #d7d7d7;
+  --line: #6d6d6d;
+  --line-strong: #ffffff;
+  --accent: #BF40BF;
+  --accent-strong: #FFD700;
+  --accent-soft: rgba(191, 64, 191, 0.18);
+  --success: #dfe8ee;
+  --warning: #FFD700;
+  --danger: #ff4d4d;
+  --shadow: 0 0 0 2px rgba(255, 255, 255, 0.15);
+  --button-text: #000000;
+  --chip-bg: rgba(255, 255, 255, 0.06);
+  --chip-border: rgba(255, 255, 255, 0.45);
+  --track: rgba(255, 255, 255, 0.15);
+  --toggle: rgba(255, 255, 255, 0.18);
+}
+
+body[data-appearance-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f2fb;
+  --surface: #ffffff;
+  --surface-alt: #f4f0ff;
+  --surface-soft: #f2e8ff;
+  --text: #2f1b34;
+  --muted: #685f76;
+  --line: #dacfe9;
+  --line-strong: #74207B;
+  --accent: #BF40BF;
+  --accent-strong: #74207B;
+  --accent-soft: rgba(191, 64, 191, 0.12);
+  --success: #6a5f7a;
+  --warning: #d7a500;
+  --danger: #c31e1e;
+  --shadow: 0 12px 28px rgba(51, 38, 62, 0.12);
+  --button-text: #fffafc;
+  --chip-bg: #f8f3ff;
+  --chip-border: #d9c9ee;
+  --track: #e7daf5;
+  --toggle: #ece1f7;
+}
+
+body[data-text-size="small"] { --app-font-scale: 0.9; }
+body[data-text-size="large"] { --app-font-scale: 1.1; }
+body[data-text-size="xlarge"] { --app-font-scale: 1.2; }
+
+body[data-density="compact"] {
+  --panel-gap: 8px;
+  --panel-padding: 10px 10px 10px;
+  --button-pad-x: 10px;
+  --button-pad-y: 8px;
+  --control-gap: 8px;
+}
+
+body[data-density="comfortable"] {
+  --panel-gap: 16px;
+  --panel-padding: 18px 18px 14px;
+  --button-pad-x: 14px;
+  --button-pad-y: 12px;
+  --control-gap: 12px;
+}
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
@@ -68,11 +170,12 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
+  font-size: calc(16px * var(--app-font-scale));
   line-height: 1.5;
   overflow-x: hidden;
 }
 body.modal-open { overflow: hidden; }
+body * { min-width: 0; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, .accordion-button:focus-visible {
@@ -95,7 +198,7 @@ strong { font-weight: 700; }
   justify-content: space-between;
   gap: 10px;
   padding: 8px 4px 10px;
-  margin: 0 0 12px;
+  margin: 0 0 var(--panel-gap);
   background: color-mix(in srgb, var(--bg) 85%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -110,6 +213,7 @@ strong { font-weight: 700; }
   line-height: 1.2;
   font-weight: 800;
   letter-spacing: -0.03em;
+  font-family: "ITC Fenice", "Bordeaux Bold", "Cinzel", Georgia, serif;
 }
 .brand-badge {
   display: inline-flex;
@@ -137,14 +241,14 @@ strong { font-weight: 700; }
 .main-sections {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--panel-gap);
 }
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--panel-radius);
   box-shadow: var(--shadow);
-  padding: 14px 14px 12px;
+  padding: var(--panel-padding);
 }
 .panel-inline {
   background: var(--surface-soft);
@@ -167,6 +271,7 @@ strong { font-weight: 700; }
   font-weight: 800;
   color: var(--muted);
   margin: 0;
+  font-family: "Bordeaux Bold", "Cinzel", Georgia, serif;
 }
 .selector-trigger,
 .pill,
@@ -174,7 +279,8 @@ strong { font-weight: 700; }
 .ghost,
 .sort-btn,
 .small-icon,
-.layout-action {
+.layout-action,
+.appearance-option {
   appearance: none;
   border: 1px solid var(--line);
   background: var(--surface-alt);
@@ -182,7 +288,7 @@ strong { font-weight: 700; }
   border-radius: 12px;
   min-height: 44px;
   min-width: 44px;
-  padding: 10px 12px;
+  padding: var(--button-pad-y) var(--button-pad-x);
   font-weight: 700;
   transition: border-color 0.18s ease, transform 0.16s ease, background 0.18s ease;
 }
@@ -972,6 +1078,78 @@ strong { font-weight: 700; }
   .topbar-actions { max-width: 100%; }
 }
 
+.appearance-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  z-index: 80;
+}
+.appearance-modal.hidden { display: none; }
+.appearance-shell {
+  width: min(540px, 100%);
+  max-height: min(85vh, 760px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.appearance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.appearance-header h3 {
+  margin: 0;
+  font-family: "Bordeaux Bold", "Cinzel", Georgia, serif;
+  font-size: 1.25rem;
+}
+.appearance-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+.appearance-group {
+  display: grid;
+  gap: 8px;
+}
+.appearance-group h4 {
+  margin: 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: "Bordeaux Bold", "Cinzel", Georgia, serif;
+}
+.appearance-option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.appearance-option {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 10px;
+  padding: var(--button-pad-y) var(--button-pad-x);
+  min-height: 42px;
+  font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.appearance-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -991,6 +1169,7 @@ strong { font-weight: 700; }
     </div>
     <div class="topbar-actions">
       <button id="themeToggle" class="pill" type="button" aria-label="Toggle dark mode">Dark mode</button>
+      <button id="appearanceToggle" class="pill" type="button" aria-label="Open appearance settings">Appearance</button>
       <button id="glossaryToggle" class="pill" type="button" aria-label="Open glossary">Glossary</button>
       <button id="layoutToggle" class="pill" type="button" aria-label="Customize dashboard layout">Customize layout</button>
     </div>
@@ -1383,6 +1562,43 @@ strong { font-weight: 700; }
   </div>
 </div>
 
+<div id="appearanceModal" class="appearance-modal hidden" aria-modal="true" role="dialog" aria-labelledby="appearanceTitle">
+  <div class="appearance-shell">
+    <div class="appearance-header">
+      <h3 id="appearanceTitle">Appearance</h3>
+      <button id="closeAppearance" class="small-icon" type="button" aria-label="Close appearance settings">✕</button>
+    </div>
+    <div class="appearance-body">
+      <div class="appearance-group">
+        <h4>Text size</h4>
+        <div class="appearance-option-row">
+          <button class="appearance-option" data-appearance-size="small" type="button">Small</button>
+          <button class="appearance-option" data-appearance-size="normal" type="button">Normal</button>
+          <button class="appearance-option" data-appearance-size="large" type="button">Large</button>
+          <button class="appearance-option" data-appearance-size="xlarge" type="button">Extra Large</button>
+        </div>
+      </div>
+      <div class="appearance-group">
+        <h4>Theme</h4>
+        <div class="appearance-option-row">
+          <button class="appearance-option" data-appearance-theme="default" type="button">Satan's Memory Lotto</button>
+          <button class="appearance-option" data-appearance-theme="high-contrast" type="button">High Contrast</button>
+          <button class="appearance-option" data-appearance-theme="light" type="button">Light</button>
+        </div>
+      </div>
+      <div class="appearance-group">
+        <h4>Density</h4>
+        <div class="appearance-option-row">
+          <button class="appearance-option" data-appearance-density="compact" type="button">Compact</button>
+          <button class="appearance-option" data-appearance-density="normal" type="button">Normal</button>
+          <button class="appearance-option" data-appearance-density="comfortable" type="button">Comfortable</button>
+        </div>
+      </div>
+      <button id="resetAppearance" class="action secondary" type="button">Reset Appearance</button>
+    </div>
+  </div>
+</div>
+
 <div id="glossaryModal" class="glossary-modal hidden" aria-modal="true" role="dialog" aria-labelledby="glossaryTitle">
   <div class="glossary-shell" tabindex="-1">
     <div class="glossary-header">
@@ -1408,6 +1624,7 @@ strong { font-weight: 700; }
   const FAVORITES_KEY = 'lfp_favorites_v2';
   const PREFS_KEY = 'lfp_preferences_v3';
   const SAVED_KEY = 'lfp_saved_sets_v3';
+  const APPEARANCE_KEY = 'lfp_appearance_v1';
   const CACHE_DB = 'lfp_history_cache_v1';
   const LAYOUT_KEY = 'lfp_dashboard_layout_v1';
   const ACCORDION_KEY = 'lfp_accordion_state_v1';
@@ -1557,6 +1774,7 @@ strong { font-weight: 700; }
     { term: 'POWERBALL GAP', definition: 'The number of Powerball drawings since a particular Powerball value last appeared. When appropriate, this should use the app\'s general Bonus-Ball Gap functionality.' }
   ];
 
+  let appearanceOpen = false;
   let glossaryOpen = false;
   let glossaryHistoryEntry = false;
   let suppressGlossaryPop = false;
@@ -3003,6 +3221,81 @@ strong { font-weight: 700; }
     $('themeToggle').textContent = dark ? 'Light mode' : 'Dark mode';
   }
 
+  function appearanceDefaults() {
+    return { theme: 'default', textSize: 'normal', density: 'normal' };
+  }
+
+  function currentAppearance() {
+    const saved = safeJsonParse(localStorage.getItem(APPEARANCE_KEY), appearanceDefaults());
+    return Object.assign({}, appearanceDefaults(), saved);
+  }
+
+  function saveAppearance(next) {
+    const clean = Object.assign({}, appearanceDefaults(), next || {});
+    localStorage.setItem(APPEARANCE_KEY, JSON.stringify(clean));
+    return clean;
+  }
+
+  function validateAppearanceLayout() {
+    const candidates = [
+      'mainSections', 'statePanel', 'gamePanel', 'analyzePanel', 'generatedSetsPanel',
+      'frequencyExplorerPanel', 'gapExplorerPanel', 'patternStatsPanel', 'customWeightedSetPanel',
+      'historicalDrawsPanel', 'savedPicksPanel'
+    ];
+    const bad = [];
+    for (const id of candidates) {
+      const el = $(id);
+      if (!el) continue;
+      if (el.scrollWidth > el.clientWidth + 1) bad.push(id);
+    }
+    return bad;
+  }
+
+  function applyAppearanceSettings() {
+    const settings = currentAppearance();
+    document.body.dataset.appearanceTheme = settings.theme;
+    document.body.dataset.textSize = settings.textSize;
+    document.body.dataset.density = settings.density;
+
+    document.querySelectorAll('[data-appearance-theme]').forEach((button) => {
+      const active = button.dataset.appearanceTheme === settings.theme;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    document.querySelectorAll('[data-appearance-size]').forEach((button) => {
+      const active = button.dataset.appearanceSize === settings.textSize;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    document.querySelectorAll('[data-appearance-density]').forEach((button) => {
+      const active = button.dataset.appearanceDensity === settings.density;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+
+    validateAppearanceLayout();
+  }
+
+  function openAppearance() {
+    if (appearanceOpen) return;
+    appearanceOpen = true;
+    $('appearanceModal').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    applyAppearanceSettings();
+  }
+
+  function closeAppearance() {
+    if (!appearanceOpen) return;
+    appearanceOpen = false;
+    $('appearanceModal').classList.add('hidden');
+    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen || layoutEditorOpen || glossaryOpen);
+  }
+
+  function resetAppearance() {
+    saveAppearance(appearanceDefaults());
+    applyAppearanceSettings();
+  }
+
   function applyDashboardLayout() {
     const config = layoutPrefs();
     const order = config.order && config.order.length ? config.order.slice() : DEFAULT_LAYOUT.order.slice();
@@ -3270,6 +3563,29 @@ strong { font-weight: 700; }
     $('glossaryPrevious').addEventListener('click', goToPreviousGlossaryTerm);
     $('glossarySearch').addEventListener('input', renderGlossaryList);
 
+    $('appearanceToggle').addEventListener('click', openAppearance);
+    $('closeAppearance').addEventListener('click', closeAppearance);
+    $('resetAppearance').addEventListener('click', resetAppearance);
+
+    document.querySelectorAll('[data-appearance-theme]').forEach((button) => {
+      button.addEventListener('click', () => {
+        saveAppearance({ ...currentAppearance(), theme: button.dataset.appearanceTheme });
+        applyAppearanceSettings();
+      });
+    });
+    document.querySelectorAll('[data-appearance-size]').forEach((button) => {
+      button.addEventListener('click', () => {
+        saveAppearance({ ...currentAppearance(), textSize: button.dataset.appearanceSize });
+        applyAppearanceSettings();
+      });
+    });
+    document.querySelectorAll('[data-appearance-density]').forEach((button) => {
+      button.addEventListener('click', () => {
+        saveAppearance({ ...currentAppearance(), density: button.dataset.appearanceDensity });
+        applyAppearanceSettings();
+      });
+    });
+
     $('layoutToggle').addEventListener('click', openLayoutEditor);
     $('closeLayoutEditor').addEventListener('click', closeLayoutEditor);
     $('restoreLayout').addEventListener('click', restoreDefaultLayout);
@@ -3377,6 +3693,9 @@ strong { font-weight: 700; }
       if (layoutEditorOpen && !event.target.closest('#layoutEditor') && !event.target.closest('#layoutToggle') && !event.target.closest('#closeLayoutEditor') && !event.target.closest('.layout-item') && !event.target.closest('.layout-action')) {
         closeLayoutEditor();
       }
+      if (appearanceOpen && !event.target.closest('#appearanceModal') && !event.target.closest('#appearanceToggle') && !event.target.closest('.appearance-option') && !event.target.closest('#resetAppearance')) {
+        closeAppearance();
+      }
       if (glossaryOpen && !event.target.closest('#glossaryModal') && !event.target.closest('#glossaryToggle') && !event.target.closest('.glossary-inline-link')) {
         closeGlossary();
       }
@@ -3387,6 +3706,7 @@ strong { font-weight: 700; }
         if (statePickerOpen) closeStatePicker();
         else if (gamePickerOpen) closeGamePicker();
         else if (layoutEditorOpen) closeLayoutEditor();
+        else if (appearanceOpen) closeAppearance();
         else if (glossaryOpen) closeGlossary();
       }
     });
@@ -3394,6 +3714,7 @@ strong { font-weight: 700; }
 
   (function init() {
     applyTheme();
+    applyAppearanceSettings();
     applyDashboardLayout();
     initAccordions();
     updateSelectorLabels();
