@@ -1591,6 +1591,99 @@ strong { font-weight: 700; }
         </div>
       </div>
     </section>
+
+    <section id="masterGameDataPanel" class="panel hidden" data-panel-key="masterGameDataPanel">
+      <div class="accordion-card open" data-preview-type="masterGameData">
+        <button class="accordion-button" type="button" aria-expanded="true">
+          <span class="title-wrap">
+            <h3>Game data &amp; rules</h3>
+            <span class="accordion-summary">Selected lottery metadata, range, and prize context</span>
+          </span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+        </button>
+        <div class="accordion-body">
+          <div id="gameMasterSummary" class="stats-grid"></div>
+          <div class="master-grid">
+            <div class="master-card">
+              <h4>Rules</h4>
+              <ul id="gameRulesList" class="meta-list"></ul>
+            </div>
+            <div class="master-card">
+              <h4>Prize / odds</h4>
+              <ul id="gameOddsList" class="meta-list"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="resultsCheckingPanel" class="panel hidden" data-panel-key="resultsCheckingPanel">
+      <div class="accordion-card open" data-preview-type="resultsChecking">
+        <button class="accordion-button" type="button" aria-expanded="true">
+          <span class="title-wrap">
+            <h3>Results &amp; checking</h3>
+            <span class="accordion-summary">Manual checks and saved-pick validation</span>
+          </span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+        </button>
+        <div class="accordion-body">
+          <div class="ticket-grid">
+            <div class="ticket-card">
+              <h4>Manual ticket check</h4>
+              <input id="manualTicketInput" class="text-input" type="text" placeholder="Example: 7, 18, 22, 31, 39 + 12" aria-label="Manual ticket input">
+              <button id="manualTicketCheck" class="action secondary" type="button">Check ticket</button>
+              <div id="manualTicketResult" class="check-output"></div>
+            </div>
+            <div class="ticket-card">
+              <h4>Saved picks check</h4>
+              <button id="savedPickCheck" class="action secondary" type="button">Validate saved picks</button>
+              <div id="savedPickCheckResult" class="check-output"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="analyticsPanel" class="panel hidden" data-panel-key="analyticsPanel">
+      <div class="accordion-card open" data-preview-type="analyticsOverview">
+        <button class="accordion-button" type="button" aria-expanded="true">
+          <span class="title-wrap">
+            <h3>Analytics overview</h3>
+            <span class="accordion-summary">Backtests, expected-vs-actual, wheel generation, and combinations</span>
+          </span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+        </button>
+        <div class="accordion-body">
+          <div class="analytic-grid">
+            <div class="analytic-card">
+              <h4>Backtest summary</h4>
+              <div id="backtestSummary" class="status"></div>
+            </div>
+            <div class="analytic-card">
+              <h4>Expected vs actual</h4>
+              <div id="expectedVsActual" class="check-output"></div>
+            </div>
+            <div class="analytic-card">
+              <h4>Wheel generator</h4>
+              <div class="field-row">
+                <input id="wheelCount" class="text-input" type="number" min="1" max="20" value="3" aria-label="Wheel count">
+                <select id="wheelMode" class="text-input" aria-label="Wheel mode">
+                  <option value="hot">Hot + balanced</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </div>
+              <button id="generateWheel" class="action secondary" type="button">Generate wheel</button>
+              <div id="wheelOutput" class="wheel-output"></div>
+            </div>
+            <div class="analytic-card">
+              <h4>Combination history</h4>
+              <div id="comboHistory" class="combo-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -1865,7 +1958,10 @@ strong { font-weight: 700; }
       'repeatPreviousStatsPanel',
       'customWeightedSetPanel',
       'historicalDrawsPanel',
-      'savedPicksPanel'
+      'savedPicksPanel',
+      'masterGameDataPanel',
+      'resultsCheckingPanel',
+      'analyticsPanel'
     ],
     hidden: []
   };
@@ -3253,6 +3349,168 @@ strong { font-weight: 700; }
     const arr = savedSets();
     $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="status">No saved picks yet.</div>';
     updateAccordionPreviews();
+    renderMasterResultsAndChecks();
+  }
+
+  function gameRuleSummary(game) {
+    const g = game || {};
+    const mainRange = Array.isArray(g.mainRange) && g.mainRange.length === 2 ? g.mainRange : [1, Number(g.mainBalls) || 1];
+    const mainBalls = Number(g.mainBalls || (mainRange[1] - mainRange[0] + 1) || 0);
+    const bonusRange = Array.isArray(g.bonusRange) && g.bonusRange.length === 2 ? g.bonusRange : null;
+    const bonusName = g.bonusName || (g.name && /powerball/i.test(g.name) ? 'Powerball' : (g.type && /bonus/i.test(g.type) ? 'Bonus' : 'Bonus ball'));
+    const bonusBalls = Number(g.bonusBalls || (bonusRange ? (bonusRange[1] - bonusRange[0] + 1) : 0) || 0);
+    return {
+      name: g.name || 'Selected lottery',
+      state: selectedState ? selectedState.name : 'Current state',
+      mainBalls,
+      mainRange,
+      bonusName,
+      bonusBalls,
+      bonusRange,
+      type: g.type || 'Draw game',
+      prizeTiers: Array.isArray(g.prizeTiers) ? g.prizeTiers : Array.isArray(g.odds) ? g.odds : []
+    };
+  }
+
+  function renderGameMasterData() {
+    const game = selectedGame || null;
+    const summary = $('gameMasterSummary');
+    const rules = $('gameRulesList');
+    const odds = $('gameOddsList');
+    if (!game) {
+      if (summary) summary.innerHTML = '<div class="status">Select a state and game to view rules, prize tiers, and other data.</div>';
+      if (rules) rules.innerHTML = '<li>No game selected.</li>';
+      if (odds) odds.innerHTML = '<li>No prize or odds data available until a game is selected.</li>';
+      return;
+    }
+
+    const meta = gameRuleSummary(game);
+    const rows = [
+      '<div class="stat"><strong>' + escapeHtml(meta.name) + '</strong><span>selected game</span></div>',
+      '<div class="stat"><strong>' + escapeHtml(String(meta.mainBalls || 0)) + '</strong><span>main balls</span></div>',
+      '<div class="stat"><strong>' + escapeHtml(meta.mainRange.join('–')) + '</strong><span>main range</span></div>',
+      '<div class="stat"><strong>' + escapeHtml(meta.bonusBalls ? String(meta.bonusBalls) : '—') + '</strong><span>' + escapeHtml(meta.bonusName) + '</span></div>'
+    ];
+    if (summary) summary.innerHTML = rows.join('');
+
+    const ruleList = [
+      'State: ' + meta.state,
+      'Game type: ' + meta.type,
+      'Main numbers: ' + meta.mainBalls + ' picks from ' + meta.mainRange[0] + '–' + meta.mainRange[1],
+      'Bonus rule: ' + (meta.bonusBalls ? meta.bonusName + ' draws from ' + (meta.bonusRange ? meta.bonusRange.join('–') : 'its own pool') : 'No separate bonus number in this game')
+    ];
+    if (rules) rules.innerHTML = ruleList.map((item) => '<li>' + escapeHtml(item) + '</li>').join('');
+
+    const prizeEntries = meta.prizeTiers.length ? meta.prizeTiers : [
+      { label: 'Jackpot / top prize', value: 'Official prize tiers are not provided in the current game response.' },
+      { label: 'Secondary prizes', value: 'Use the selected game details for the official promotion rules.' }
+    ];
+    if (odds) odds.innerHTML = prizeEntries.slice(0, 4).map((entry) => {
+      const label = entry && entry.label ? entry.label : 'Prize tier';
+      const value = entry && (entry.value != null || entry.description != null || entry.name != null) ? (entry.value != null ? entry.value : entry.description != null ? entry.description : entry.name) : 'No data';
+      return '<li><strong>' + escapeHtml(String(label)) + ':</strong> ' + escapeHtml(String(value)) + '</li>';
+    }).join('');
+  }
+
+  function parseTicketInput(value) {
+    const digits = String(value || '').split(/[^0-9]+/).map(Number).filter(Number.isFinite);
+    return [...new Set(digits.filter((n) => Number.isInteger(n) && n >= 0))];
+  }
+
+  function renderManualTicketCheck() {
+    const el = $('manualTicketResult');
+    const input = $('manualTicketInput');
+    if (!el || !input) return;
+    const ticket = parseTicketInput(input.value);
+    if (!ticket.length) {
+      el.innerHTML = '<div class="mini">Enter a ticket or number list to compare against the latest available draw.</div>';
+      return;
+    }
+    if (!fullRows.length) {
+      el.innerHTML = '<div class="mini">Analyze a game first so the latest draw can be used as the comparison reference.</div>';
+      return;
+    }
+    const latest = fullRows[0] || {};
+    const latestNumbers = Array.isArray(latest.numbers) ? latest.numbers.map(Number).filter(Number.isFinite) : [];
+    const bonusValue = latest.bonus_ball != null ? Number(latest.bonus_ball) : null;
+    const matches = ticket.filter((n) => latestNumbers.includes(n)).length;
+    const bonusMatch = bonusValue != null && ticket.includes(bonusValue);
+    const winnerText = matches === latestNumbers.length && (!bonusValue || bonusMatch) ? 'Perfect ticket match against the latest draw.' : (matches > 0 ? 'Matches ' + matches + ' main numbers' + (bonusMatch ? ' and the bonus number.' : '.') : 'No main numbers matched the latest draw.');
+    el.innerHTML = '<div class="mini"><strong>Latest draw:</strong> ' + escapeHtml(latestNumbers.join(', ')) + (bonusValue != null ? ' + ' + escapeHtml(String(bonusValue)) : '') + '</div><div class="mini">' + escapeHtml(winnerText) + '</div>';
+  }
+
+  function renderSavedPickCheck() {
+    const el = $('savedPickCheckResult');
+    if (!el) return;
+    const saved = savedSets();
+    if (!saved.length) {
+      el.innerHTML = '<div class="mini">No saved picks are available yet.</div>';
+      return;
+    }
+    if (!fullRows.length) {
+      el.innerHTML = '<div class="mini">Analyze the selected game before validating saved picks.</div>';
+      return;
+    }
+    const latest = fullRows[0] || {};
+    const latestNumbers = Array.isArray(latest.numbers) ? latest.numbers.map(Number).filter(Number.isFinite) : [];
+    const bonusValue = latest.bonus_ball != null ? Number(latest.bonus_ball) : null;
+    const rows = saved.slice(0, 6).map((entry) => {
+      const all = (entry.sets || []).flatMap((set) => Array.isArray(set.main) ? [set.main] : []);
+      const best = all.map((numbers) => numbers.filter((n) => latestNumbers.includes(Number(n))).length).sort((a, b) => b - a)[0] || 0;
+      return '<div class="mini"><strong>' + escapeHtml(entry.game || 'Saved pick') + ':</strong> ' + escapeHtml(String(best)) + ' match(es) with the latest draw.</div>';
+    }).join('');
+    el.innerHTML = rows || '<div class="mini">No saved picks were available for validation.</div>';
+  }
+
+  function renderMasterAnalytics() {
+    const backtestEl = $('backtestSummary');
+    const expectedEl = $('expectedVsActual');
+    const wheelOutputEl = $('wheelOutput');
+    const comboEl = $('comboHistory');
+    if (!backtestEl || !expectedEl || !wheelOutputEl || !comboEl) return;
+    if (!analysis || !fullRows.length) {
+      backtestEl.innerHTML = '<div class="mini">Analyze a game to populate backtest and comparison data.</div>';
+      expectedEl.innerHTML = '<div class="mini">No comparison data until the archive is loaded.</div>';
+      wheelOutputEl.innerHTML = '<div class="mini">Generate a wheel after a selected game has enough history.</div>';
+      comboEl.innerHTML = '<div class="mini">No combination history available yet.</div>';
+      return;
+    }
+
+    const stats = analysis.all;
+    const hot = entriesFor(stats).sort((a, b) => b.count - a.count || a.n - b.n).slice(0, 6);
+    const overdue = gapEntries(analysis.all).filter((x) => !x.never).sort((a, b) => b.current - a.current || a.n - b.n).slice(0, 6);
+    const latest = fullRows[0] || {};
+    const latestNumbers = Array.isArray(latest.numbers) ? latest.numbers.map(Number).filter(Number.isFinite) : [];
+    const latestBonus = latest.bonus_ball != null ? Number(latest.bonus_ball) : null;
+    const expectedText = hot.length ? hot.map((item) => item.n + ' (' + item.count + ')').join(', ') : 'No hot-number data';
+    const actualText = latestNumbers.length ? latestNumbers.join(', ') + (latestBonus != null ? ' + ' + latestBonus : '') : 'No latest draw';
+    backtestEl.innerHTML = '<div class="mini">Archive: ' + escapeHtml(String(fullRows.length)) + ' draws analyzed · ' + escapeHtml(String(analysis.sets.length)) + ' generated candidate sets · ' + escapeHtml(String(analysis.all.draws || fullRows.length)) + ' total historical draws.</div>';
+    expectedEl.innerHTML = '<div class="mini"><strong>Expected hot numbers:</strong> ' + escapeHtml(expectedText) + '</div><div class="mini"><strong>Latest actual draw:</strong> ' + escapeHtml(actualText) + '</div>';
+
+    const wheelSource = selectedGame && selectedGame.mainRange ? Array.from({ length: selectedGame.mainRange[1] - selectedGame.mainRange[0] + 1 }, (_, idx) => Number(selectedGame.mainRange[0]) + idx) : (hot.map((n) => n.n).slice(0, 12));
+    const wheelCount = Math.max(1, Math.min(20, Number($('wheelCount')?.value || 3)));
+    const mode = $('wheelMode')?.value || 'hot';
+    const wheelSets = [];
+    for (let i = 0; i < Math.min(wheelCount, 10); i++) {
+      const pool = mode === 'overdue' ? overdue.map((x) => x.n) : mode === 'balanced' ? hot.map((x) => x.n).concat(overdue.map((x) => x.n)) : hot.map((x) => x.n).slice(0, 12);
+      const setNumbers = [...new Set(pool.filter((n) => wheelSource.includes(Number(n))).slice(0, Math.min(stats.len || 6, 12)))];
+      if (setNumbers.length < Math.max(1, Number(stats.len || 5))) {
+        wheelSets.push(setNumbers.length ? setNumbers : wheelSource.slice(0, Math.max(1, Number(stats.len || 5))));
+      } else {
+        wheelSets.push(setNumbers.slice(0, Math.max(1, Number(stats.len || 5))));
+      }
+    }
+    wheelOutputEl.innerHTML = wheelSets.map((set, idx) => '<div class="mini">Wheel ' + (idx + 1) + ': ' + escapeHtml(set.map(String).join(', ')) + '</div>').join('') || '<div class="mini">No wheel output available.</div>';
+
+    const pairSummary = patternAnalysis(fullRows, analysis.all).pairs || [];
+    comboEl.innerHTML = (pairSummary.slice(0, 5).length ? pairSummary.slice(0, 5) : [['No pair data', 0]]).map(([combo, count]) => '<div class="mini"><strong>' + escapeHtml(String(combo)) + ':</strong> ' + escapeHtml(String(count)) + ' draws</div>').join('');
+  }
+
+  function renderMasterResultsAndChecks() {
+    renderGameMasterData();
+    renderManualTicketCheck();
+    renderSavedPickCheck();
+    renderMasterAnalytics();
   }
 
   function renderHistory() {
@@ -3475,6 +3733,9 @@ strong { font-weight: 700; }
       preferredAvoidedNumbersPanel: 'Preferred / Avoided Numbers',
       historicalDrawsPanel: 'Historical Draws',
       savedPicksPanel: 'Saved Picks',
+      masterGameDataPanel: 'Game Data & Rules',
+      resultsCheckingPanel: 'Results & Checking',
+      analyticsPanel: 'Analytics Overview',
       modelScoresPanel: 'Model Scores / Model Details',
       fullHistorySummaryPanel: 'Full-History Summary',
       progressiveHistoryPanel: 'Progressive History',
@@ -3731,8 +3992,15 @@ strong { font-weight: 700; }
     $('regenerate').addEventListener('click', () => {
       analysis.sets = generateSets(fullRows, selectedGame, analysis.all);
       renderSets();
+      renderMasterResultsAndChecks();
       setStatus('actionStatus', 'Generated three new sets from the same full-history models.', 'good');
     });
+    $('manualTicketCheck').addEventListener('click', renderManualTicketCheck);
+    $('manualTicketInput').addEventListener('input', renderManualTicketCheck);
+    $('savedPickCheck').addEventListener('click', renderSavedPickCheck);
+    $('generateWheel').addEventListener('click', renderMasterAnalytics);
+    $('wheelCount').addEventListener('input', renderMasterAnalytics);
+    $('wheelMode').addEventListener('change', renderMasterAnalytics);
 
     $('analyze').addEventListener('click', async () => {
       if (!selectedState || !selectedGame) return;
@@ -3808,6 +4076,8 @@ strong { font-weight: 700; }
     initAccordions();
     updateSelectorLabels();
     renderSaved();
+    renderGameMasterData();
+    renderMasterAnalytics();
     attachEvents();
     loadStates();
   })();
