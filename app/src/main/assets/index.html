@@ -1169,6 +1169,16 @@ strong { font-weight: 700; }
         </button>
         <div class="accordion-body">
           <div class="status" style="margin-top: 8px;">Current gap = draws since last appearance. Average and maximum gaps use the full archive.</div>
+          <div class="field-row" style="margin-top: 10px;">
+            <div class="stack" style="gap: 8px;">
+              <div class="status">Most overdue</div>
+              <div id="overdueTop" class="freq"></div>
+            </div>
+            <div class="stack" style="gap: 8px;">
+              <div class="status">Least overdue</div>
+              <div id="overdueLow" class="freq"></div>
+            </div>
+          </div>
 
           <section id="mainNumberGapsPanel" class="panel-inline" data-panel-key="mainNumberGapsPanel" data-preview-type="mainNumberGaps">
             <div class="accordion-card open" data-preview-type="mainNumberGaps">
