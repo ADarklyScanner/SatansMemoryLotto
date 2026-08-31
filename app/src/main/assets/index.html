@@ -818,6 +818,133 @@ strong { font-weight: 700; }
   border-top: 1px solid var(--line);
   padding: 12px 14px 14px;
 }
+.glossary-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.55);
+}
+.glossary-modal.hidden { display: none; }
+.glossary-shell {
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.glossary-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.glossary-header-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.glossary-header h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+.glossary-back {
+  padding: 8px 10px;
+  min-height: 36px;
+}
+.glossary-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+.glossary-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.glossary-nav button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-weight: 700;
+}
+.glossary-nav button.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.glossary-notice {
+  margin: 0;
+  padding: 12px 14px 0;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.5;
+}
+.glossary-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px 22px;
+  display: grid;
+  gap: 10px;
+}
+.glossary-entry {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  scroll-margin-top: 128px;
+}
+.glossary-entry.is-highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+  background: var(--accent-soft);
+}
+.glossary-entry h4 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.glossary-entry p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.glossary-inline-link {
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  padding: 0;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.glossary-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 26px 12px 0;
+}
 .empty-state {
   color: var(--muted);
   font-size: 0.82rem;
@@ -864,6 +991,7 @@ strong { font-weight: 700; }
     </div>
     <div class="topbar-actions">
       <button id="themeToggle" class="pill" type="button" aria-label="Toggle dark mode">Dark mode</button>
+      <button id="glossaryToggle" class="pill" type="button" aria-label="Open glossary">Glossary</button>
       <button id="layoutToggle" class="pill" type="button" aria-label="Customize dashboard layout">Customize layout</button>
     </div>
   </header>
@@ -1245,6 +1373,23 @@ strong { font-weight: 700; }
   </div>
 </div>
 
+<div id="glossaryModal" class="glossary-modal hidden" aria-modal="true" role="dialog" aria-labelledby="glossaryTitle">
+  <div class="glossary-shell" tabindex="-1">
+    <div class="glossary-header">
+      <div class="glossary-header-inner">
+        <button id="glossaryPrevious" class="ghost glossary-back hidden" type="button" aria-label="Previous glossary term">Previous term</button>
+        <h3 id="glossaryTitle">Glossary</h3>
+      </div>
+      <button id="closeGlossary" class="small-icon" type="button" aria-label="Close glossary">✕</button>
+    </div>
+    <div class="glossary-toolbar">
+      <input id="glossarySearch" class="search-box" type="search" placeholder="Search glossary terms and definitions" aria-label="Search glossary" autocomplete="off">
+      <div id="glossaryNav" class="glossary-nav" aria-label="Alphabet quick navigation"></div>
+    </div>
+    <div id="glossaryList" class="glossary-list" aria-live="polite"></div>
+  </div>
+</div>
+
 <script>
 (() => {
   'use strict';
@@ -1256,6 +1401,159 @@ strong { font-weight: 700; }
   const CACHE_DB = 'lfp_history_cache_v1';
   const LAYOUT_KEY = 'lfp_dashboard_layout_v1';
   const ACCORDION_KEY = 'lfp_accordion_state_v1';
+  const GLOSSARY_ENTRIES = [
+    { term: 'ALL HISTORY', definition: 'Every historical drawing currently available to the app for the selected lottery game.' },
+    { term: 'ALL-TIME FREQUENCY', definition: 'The number of times a number has appeared across the complete available historical record.' },
+    { term: 'ANALYSIS', definition: 'The app\'s examination of historical lottery results using measurements such as frequency, gaps, patterns, combinations, and distributions. Analysis describes historical data; it does not predict a random drawing with certainty.' },
+    { term: 'ANALYSIS WINDOW', definition: 'The portion of historical drawings currently being examined, such as All History, Last 100, Last 500, or Last 1,000.' },
+    { term: 'AVERAGE GAP', definition: 'The average number of drawings between appearances of a particular number in the analyzed history.' },
+    { term: 'AVOIDED NUMBER', definition: 'A number the user has instructed the custom generator to avoid or reduce in preference according to the app\'s existing behavior.' },
+    { term: 'BALL', definition: 'A numbered value eligible to be selected in a lottery drawing. Physical lotteries may use actual numbered balls, while electronic systems may select equivalent values electronically.' },
+    { term: 'BALL RANGE', definition: 'The allowed numerical range for a particular number pool in the selected game.' },
+    { term: 'BONUS BALL', definition: 'A number drawn separately from the main-number pool in games that use a bonus number. Its allowed range and rules may differ from the main numbers. When the selected game has a specific name such as Mega Ball or Powerball, display that terminology instead.' },
+    { term: 'BONUS-BALL FREQUENCY', definition: 'The number of historical drawings in which each eligible bonus-ball value appeared. Bonus-ball frequencies are calculated separately from main-number frequencies.' },
+    { term: 'BONUS-BALL GAP', definition: 'The number of drawings since a particular bonus-ball value most recently appeared.' },
+    { term: 'BONUS-BALL RANGE', definition: 'The allowed numerical range of the selected game\'s separate bonus-number pool.' },
+    { term: 'CANDIDATE SET', definition: 'A complete possible number set being evaluated by one of the app\'s generation or scoring methods.' },
+    { term: 'CHART', definition: 'A visual representation of historical analysis data, such as number frequencies or current gaps.' },
+    { term: 'COLD NUMBER', definition: 'A number with relatively low historical frequency within the currently selected analysis window. “Cold” describes past results and does not mean the number is less likely to occur in the next independent drawing.' },
+    { term: 'COLD-TO-HOT', definition: 'A frequency sorting mode that displays lower-frequency numbers before higher-frequency numbers.' },
+    { term: 'COMBINATION', definition: 'A group of lottery numbers considered together. In games where draw order does not determine the basic combination, the same numbers in a different order represent the same combination.' },
+    { term: 'COMBINED SCORE', definition: 'A model score produced by combining multiple existing scoring signals or components.' },
+    { term: 'COMMON PAIR', definition: 'Two main numbers that have occurred together relatively often within the analyzed historical data.' },
+    { term: 'COMMON TRIPLE', definition: 'Three main numbers that have occurred together relatively often within the analyzed historical data.' },
+    { term: 'COMPARISON WINDOW', definition: 'A selected historical period used to compare behavior across different amounts of history.' },
+    { term: 'CONSECUTIVE NUMBERS', definition: 'Two or more main numbers directly adjacent numerically, such as 14 and 15.' },
+    { term: 'CONSECUTIVE-NUMBER ANALYSIS', definition: 'Historical analysis of how often drawings contain one or more consecutive main-number sequences.' },
+    { term: 'CONSISTENCY', definition: 'A measurement of how similar a number\'s historical behavior is across different portions of the available history, according to the app\'s existing calculation.' },
+    { term: 'CORRELATION', definition: 'A statistical relationship in which measurements tend to vary together. Correlation does not establish causation and does not by itself establish predictive power.' },
+    { term: 'CURRENT GAP', definition: 'The number of completed drawings since a particular number most recently appeared.' },
+    { term: 'CURRENT-GAP CHART', definition: 'A visual comparison of current gap values for eligible numbers.' },
+    { term: 'CUSTOM WEIGHTING', definition: 'User-selected control over the relative influence of supported statistical factors in the Custom Weighted Set generator.' },
+    { term: 'CUSTOM WEIGHTED SET', definition: 'A generated number set produced using the user\'s selected weighting and preferred/avoided-number settings while retaining the app\'s existing generation rules.' },
+    { term: 'DATA BATCH', definition: 'A group of historical drawings retrieved or processed together while the app builds its historical dataset.' },
+    { term: 'DATASET', definition: 'The collection of historical lottery drawings currently available for analysis.' },
+    { term: 'DRAW', definition: 'One official lottery drawing event in which the game\'s winning numbers are selected.' },
+    { term: 'DRAW COUNT', definition: 'The number of historical drawings included in the current dataset or analysis window.' },
+    { term: 'DRAW DATE', definition: 'The official date associated with a historical lottery drawing.' },
+    { term: 'DRAW HISTORY', definition: 'The chronological collection of previous official drawings available to the app.' },
+    { term: 'DUPLICATE DRAW', definition: 'A historical drawing record that appears more than once in retrieved data. Duplicate records are excluded according to the app\'s existing duplicate-handling behavior so they do not distort analysis.' },
+    { term: 'EVEN NUMBER', definition: 'An integer divisible by two without a remainder.' },
+    { term: 'EXPECTED GAP', definition: 'A typical or reference interval between appearances derived from historical behavior or frequency. It does not mean a number is required to appear when that interval is reached.' },
+    { term: 'FAVORITE GAME', definition: 'A lottery game the user has saved for faster selection according to the app\'s existing favorites system.' },
+    { term: 'FAVORITE STATE', definition: 'A state or jurisdiction the user has saved for faster selection.' },
+    { term: 'FEATURE', definition: 'A measurable input or characteristic that can be used by an analysis or scoring model.' },
+    { term: 'FREQUENCY', definition: 'How often a number has appeared within a specified set of historical drawings.' },
+    { term: 'FREQUENCY ANALYSIS', definition: 'Comparison of how often eligible numbers appeared within the selected historical data.' },
+    { term: 'FREQUENCY CHART', definition: 'A graphical representation of historical number frequencies.' },
+    { term: 'FREQUENCY COUNT', definition: 'The raw number of appearances of a number in the selected historical data.' },
+    { term: 'FREQUENCY PERCENTAGE', definition: 'A number\'s historical appearance count expressed relative to the number of analyzed drawings.' },
+    { term: 'FREQUENCY RANK', definition: 'A number\'s position when eligible numbers are ordered according to historical frequency.' },
+    { term: 'FREQUENCY TREND', definition: 'A comparison of a number\'s frequency across different historical windows rather than only one period.' },
+    { term: 'FULL FREQUENCY TABLE', definition: 'The app\'s complete frequency listing for the eligible numbers of the selected game.' },
+    { term: 'FULL HISTORY', definition: 'The complete historical dataset currently available to the app for the selected game.' },
+    { term: 'GAME', definition: 'A specific lottery with its own drawing rules, number pools, ranges, and other requirements.' },
+    { term: 'GAP', definition: 'The number of drawings separating appearances of a number, or, for Current Gap, the number of drawings since its latest appearance.' },
+    { term: 'GAP ANALYSIS', definition: 'Historical examination of how long eligible numbers have gone between appearances and how their current gaps compare with historical behavior.' },
+    { term: 'GAP COMPONENT', definition: 'The portion of an existing model score derived from gap or overdue information. Describe its exact behavior according to the current implementation.' },
+    { term: 'GAP RATIO', definition: 'A comparison between a number\'s current gap and an appropriate historical reference such as its average gap, when used by the current implementation.' },
+    { term: 'GENERATED SET', definition: 'A complete lottery-number combination created by one of the app\'s generators.' },
+    { term: 'GENERATION MODEL', definition: 'A defined method used by the app to evaluate or construct generated number sets.' },
+    { term: 'GENERATOR', definition: 'The app functionality responsible for constructing candidate number sets according to a particular model or set of settings.' },
+    { term: 'HIGH NUMBER', definition: 'A main number classified in the higher portion of the selected game\'s valid main-number range according to the app\'s existing High/Low definition.' },
+    { term: 'HIGH/LOW ANALYSIS', definition: 'Historical analysis of the balance between numbers classified as High and Low.' },
+    { term: 'HIGH/LOW SPLIT', definition: 'The number of High versus Low main numbers contained in a drawing or generated set.' },
+    { term: 'HISTORICAL CONSISTENCY', definition: 'The degree to which a number\'s historical behavior remains similar across the historical periods used by the app\'s consistency calculation.' },
+    { term: 'HISTORICAL DRAW', definition: 'A previous official lottery drawing contained in the dataset.' },
+    { term: 'HISTORICAL FREQUENCY', definition: 'The observed number of appearances of a number in historical drawings.' },
+    { term: 'HISTORICAL OVERLAP', definition: 'The amount of similarity between a candidate generated set and historical drawings according to the app\'s existing overlap calculation. It is a model-analysis measurement, not the probability that the candidate will win.' },
+    { term: 'HISTORICAL WINDOW', definition: 'A defined portion of historical drawings used for a calculation or comparison.' },
+    { term: 'HOT NUMBER', definition: 'A number with relatively high historical frequency within the selected analysis window. “Hot” describes historical results and does not make the number inherently more likely in the next independent drawing.' },
+    { term: 'HOT-TO-COLD', definition: 'A frequency sorting mode that displays higher-frequency numbers before lower-frequency numbers.' },
+    { term: 'INDEPENDENCE', definition: 'The statistical principle that, in a properly randomized lottery, the outcome of one drawing does not cause a particular number to become more or less likely in the next drawing merely because of its previous appearances or absences.' },
+    { term: 'LAST 100', definition: 'An analysis view restricted to the most recent 100 available historical drawings.' },
+    { term: 'LAST 500', definition: 'An analysis view restricted to the most recent 500 available historical drawings.' },
+    { term: 'LAST 1,000', definition: 'An analysis view restricted to the most recent 1,000 available historical drawings.' },
+    { term: 'LATEST DRAW', definition: 'The most recent official drawing currently contained in the app\'s dataset.' },
+    { term: 'LEAST FREQUENT', definition: 'The number or numbers with the lowest historical appearance counts under the currently selected frequency view.' },
+    { term: 'LEAST OVERDUE', definition: 'Numbers with relatively small current gaps under the app\'s existing overdue ordering.' },
+    { term: 'LOTTERY GAME', definition: 'A particular lottery ruleset defining matters such as the number of main numbers selected, valid number ranges, and whether a separate bonus number is used.' },
+    { term: 'LOW NUMBER', definition: 'A main number classified in the lower portion of the selected game\'s valid main-number range according to the app\'s existing High/Low definition.' },
+    { term: 'MAIN BALL', definition: 'A number selected from the primary number pool rather than a separate bonus-number pool.' },
+    { term: 'MAIN-BALL RANGE', definition: 'The valid numerical range from which the selected game\'s main numbers are chosen.' },
+    { term: 'MAIN NUMBER', definition: 'One of the primary numbers selected from a game\'s main-number pool.' },
+    { term: 'MAIN-NUMBER FREQUENCY', definition: 'The historical appearance frequency of values drawn from the main-number pool.' },
+    { term: 'MAIN-NUMBER GAP', definition: 'The number of drawings separating appearances of a particular main number, or its current absence when referring to Current Gap.' },
+    { term: 'MAIN–BONUS ASSOCIATION', definition: 'How often a particular main number and a particular separately drawn bonus number appeared in the same historical drawing. This is kept distinct from Pair Statistics because the main number and bonus number belong to different number pools.' },
+    { term: 'MAXIMUM GAP', definition: 'The largest historical number of drawings observed between appearances of a particular number.' },
+    { term: 'MEGA BALL', definition: 'The separately drawn bonus number used by Mega Millions. Mega Ball values belong to their own number pool and must not be treated as ordinary main-number values.' },
+    { term: 'MEGA BALL FREQUENCY', definition: 'The historical frequency of Mega Ball values. When appropriate, this should use the app\'s general Bonus-Ball Frequency functionality.' },
+    { term: 'MEGA BALL GAP', definition: 'The number of Mega Millions drawings since a particular Mega Ball value last appeared. When appropriate, this should use the app\'s general Bonus-Ball Gap functionality.' },
+    { term: 'MODEL', definition: 'A defined scoring or generation method used by the app to evaluate numbers or candidate sets.' },
+    { term: 'MODEL COMPONENT', definition: 'One statistical signal or scoring element contributing to a model\'s overall evaluation.' },
+    { term: 'MODEL DETAILS', definition: 'The app\'s explanation or breakdown of the components contributing to a generated set\'s model evaluation.' },
+    { term: 'MODEL RANKING', definition: 'The ordering of candidate sets according to the applicable model score.' },
+    { term: 'MODEL SCORE', definition: 'A numerical value used by the app to compare candidates according to its historical-analysis signals. A higher model score is NOT the mathematical probability that a set will win.' },
+    { term: 'MOST FREQUENT', definition: 'The number or numbers with the highest historical appearance counts in the selected frequency view.' },
+    { term: 'MOST OVERDUE', definition: 'Numbers having relatively large current gaps according to the app\'s existing overdue calculation. “Most overdue” does not mean “most likely to appear next.”' },
+    { term: 'NORMALIZATION', definition: 'Rescaling measurements that use different numerical ranges so they can be combined or compared without one dominating solely because of its scale.' },
+    { term: 'NUMBER ORDER', definition: 'A sorting mode that orders eligible numbers by their numerical values instead of a statistic such as frequency.' },
+    { term: 'NUMBER PAIR', definition: 'Two distinct main numbers considered together for Pair Statistics.' },
+    { term: 'NUMBER POOL', definition: 'The complete set of eligible values from which a particular part of a lottery drawing selects its numbers.' },
+    { term: 'NUMBER SCORE', definition: 'A model\'s numerical evaluation of an individual eligible number according to the signals actually used by that model.' },
+    { term: 'NUMBER SET', definition: 'A complete group of numbers forming one candidate lottery play.' },
+    { term: 'NUMBER TRIPLE', definition: 'Three distinct main numbers considered together for Triple Statistics.' },
+    { term: 'ODD NUMBER', definition: 'An integer that is not evenly divisible by two.' },
+    { term: 'ODD/EVEN ANALYSIS', definition: 'Historical analysis of the balance between odd and even main numbers in drawings.' },
+    { term: 'ODD/EVEN SPLIT', definition: 'The number of odd main numbers compared with even main numbers in a drawing or generated set.' },
+    { term: 'OVERDUE', definition: 'A descriptive term for a number whose Current Gap is relatively large according to the app\'s historical gap analysis. It does not mean the number is mathematically “due” to appear.' },
+    { term: 'OVERDUE COMPONENT', definition: 'The portion of an existing model score derived from overdue/gap information according to the current implementation.' },
+    { term: 'OVERDUE NUMBER', definition: 'A number whose current absence is relatively large under the app\'s gap/overdue measurement. It is a historical description, not a prediction.' },
+    { term: 'PAIR FREQUENCY', definition: 'The number of analyzed historical drawings in which a particular pair of main numbers appeared together.' },
+    { term: 'PAIR STATISTICS', definition: 'Historical analysis of how often two particular MAIN numbers appeared together in the same drawing. Pair Statistics describes past co-occurrence. It does not mean a historically common pair has a greater mathematical probability of appearing together in the next independent drawing.' },
+    { term: 'PATTERN', definition: 'A measurable structural characteristic of a draw or number set, such as its Odd/Even split, High/Low split, sum, consecutive numbers, or repeats from the previous draw.' },
+    { term: 'PATTERN ANALYSIS', definition: 'Historical analysis of structural characteristics found in previous drawings.' },
+    { term: 'PATTERN COMPONENT', definition: 'A model-scoring contribution derived from a supported structural pattern when such a component is actually used by the current model.' },
+    { term: 'PICK', definition: 'A complete number selection intended to represent one possible lottery play.' },
+    { term: 'POSITION-BASED MODEL', definition: 'For digit games, the app evaluates each position separately using the historical frequency of each digit within that slot, then combines position-specific signals with the same generation heuristics the app already uses for digit-based selection. This implementation does not treat the digits as a single interchangeable pool; the position is part of the model.' },
+    { term: 'PREFERRED NUMBER', definition: 'A number the user asks the Custom Weighted Set generator to favor according to the app\'s existing preferred-number behavior.' },
+    { term: 'PROBABILITY', definition: 'A mathematical measurement of how likely an event is to occur. Historical frequency, model score, hot/cold status, or overdue status must not be described as changing the underlying probability of a properly randomized future drawing unless the game itself has unequal probabilities.' },
+    { term: 'PROGRESSIVE HISTORY', definition: 'The app\'s process of updating historical analysis as additional batches of older drawing data are downloaded, while final full-history calculations use the completed available archive according to existing behavior.' },
+    { term: 'RANDOMNESS', definition: 'The property of outcomes not being predictably determined by previous outcomes. Proper lottery drawings are designed to produce random selections within their rules.' },
+    { term: 'RANK', definition: 'The relative position of a number or candidate set after sorting by a particular measurement or score.' },
+    { term: 'RECENT FREQUENCY', definition: 'Historical frequency calculated from a recent subset of drawings rather than the complete available history.' },
+    { term: 'RECENCY', definition: 'How recently an event or number appearance occurred relative to the latest drawing.' },
+    { term: 'REGENERATE', definition: 'Create new generated number sets using the currently selected model/settings.' },
+    { term: 'REPEAT COUNT', definition: 'The number of main numbers in a drawing that also appeared among the main numbers of the immediately previous drawing.' },
+    { term: 'REPEATED NUMBER', definition: 'A main number appearing in both a drawing and the immediately preceding drawing.' },
+    { term: 'REPEAT-FROM-PREVIOUS ANALYSIS', definition: 'Historical analysis of how many main numbers in each drawing also occurred in the immediately previous drawing.' },
+    { term: 'SAVED PICK', definition: 'A generated or selected number set the user has stored using the app\'s Saved Picks functionality.' },
+    { term: 'SCORE', definition: 'A numerical measurement used by an app model to compare numbers or candidate sets. A score is not automatically equivalent to probability.' },
+    { term: 'SELECTED HISTORY VIEW', definition: 'The historical window currently chosen for applicable displays or comparisons, such as All History, Last 100, Last 500, or Last 1,000.' },
+    { term: 'SIGNAL', definition: 'A measurable statistic or feature supplied to a scoring model as information.' },
+    { term: 'STATE', definition: 'The lottery jurisdiction selected in the app for locating its available games. Not every lottery game is necessarily limited to a single state.' },
+    { term: 'STATISTICAL WINDOW', definition: 'The portion of historical data used to calculate a particular statistic.' },
+    { term: 'SUM', definition: 'The arithmetic total obtained by adding the main numbers in a drawing or candidate set. A separately drawn bonus number is not included unless the app explicitly labels a calculation otherwise.' },
+    { term: 'SUM DISTRIBUTION', definition: 'The historical distribution of totals obtained by adding the main numbers in each drawing. It shows which ranges of totals occurred more or less frequently in the analyzed history.' },
+    { term: 'SUM-DISTRIBUTION SCORE', definition: 'The app\'s model signal comparing a candidate set\'s main-number total with historically observed sum ranges/buckets. It is a modest candidate-ranking component and must not be described as the probability that the set will win.' },
+    { term: 'SUM BUCKET', definition: 'A defined range of draw-sum values grouped together so the app can measure the historical Sum Distribution without treating every possible exact total as a separate category.' },
+    { term: 'TOP 3 PREVIEW', definition: 'The condensed view shown while an applicable results panel is collapsed, displaying its current three leading entries according to that panel\'s active ordering/filter/history state.' },
+    { term: 'TRIPLE FREQUENCY', definition: 'The number of analyzed historical drawings in which a particular combination of three main numbers appeared together.' },
+    { term: 'TRIPLE STATISTICS', definition: 'Historical analysis of how often three particular MAIN numbers appeared together in the same drawing. Triple combinations naturally have fewer observations than individual numbers or pairs because there are far more possible triples. Historical triple frequency does not make a triple inherently more likely in the next independent drawing.' },
+    { term: 'WEIGHT', definition: 'The relative influence assigned to a particular signal when multiple signals are combined.' },
+    { term: 'WEIGHTED SCORE', definition: 'A combined score in which contributing signals have different levels of influence according to their assigned weights.' },
+    { term: 'POWERBALL', definition: 'The separately drawn bonus number used by Powerball. Powerball values belong to their own number pool and must not be treated as ordinary main-number values.' },
+    { term: 'POWERBALL FREQUENCY', definition: 'The historical frequency of Powerball values. When appropriate, this should use the app\'s general Bonus-Ball Frequency functionality.' },
+    { term: 'POWERBALL GAP', definition: 'The number of Powerball drawings since a particular Powerball value last appeared. When appropriate, this should use the app\'s general Bonus-Ball Gap functionality.' }
+  ];
+
+  let glossaryOpen = false;
+  let glossaryHistoryEntry = false;
+  let suppressGlossaryPop = false;
+  let glossaryBackStack = [];
+  let glossaryCurrentTerm = null;
+  const GLOSSARY_SORTED = [...GLOSSARY_ENTRIES].sort((a, b) => a.term.localeCompare(b.term, undefined, { sensitivity: 'base' }));
+
   const DEFAULT_LAYOUT = {
     version: 1,
     order: [
@@ -1521,6 +1819,186 @@ strong { font-weight: 700; }
     $('layoutEditor').classList.add('hidden');
     document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen);
   }
+
+  function slugForGlossaryTerm(term) {
+    return String(term || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  function glossaryBonusTerm() {
+    if (selectedGame && selectedGame.bonusName && String(selectedGame.bonusName).trim()) return String(selectedGame.bonusName).trim();
+    if (selectedGame && /mega/i.test(String(selectedGame.name || ''))) return 'Mega Ball';
+    if (selectedGame && /powerball/i.test(String(selectedGame.name || ''))) return 'Powerball';
+    return 'Bonus Ball';
+  }
+
+  function glossaryDisplayText(text) {
+    let out = String(text || '');
+    const bonusTerm = glossaryBonusTerm();
+    const hyphenated = bonusTerm.replace(/\s+/g, '-');
+    out = out.replace(/\bBonus Ball\b/gi, bonusTerm);
+    out = out.replace(/\bBonus-Ball\b/gi, hyphenated);
+    out = out.replace(/\bbonus ball\b/gi, bonusTerm.toLowerCase());
+    out = out.replace(/\bbonus-ball\b/gi, hyphenated.toLowerCase());
+    return out;
+  }
+
+  function escapeHtmlForGlossary(text) {
+    return escapeHtml(text).replace(/\n/g, '<br>');
+  }
+
+  function glossaryLinkText(text) {
+    const terms = [...GLOSSARY_SORTED].sort((a, b) => b.term.length - a.term.length);
+    let rendered = escapeHtmlForGlossary(text);
+    const replacements = [];
+
+    terms.forEach((entry) => {
+      const pattern = new RegExp('(?<![A-Za-z0-9])' + entry.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])', 'ig');
+      rendered = rendered.replace(pattern, (match) => {
+        const key = '__GLOSSARY_LINK_' + replacements.length + '__';
+        replacements.push({ key, term: entry.term });
+        return key;
+      });
+    });
+
+    rendered = rendered.replace(/__GLOSSARY_LINK_(\d+)__/g, (_, index) => {
+      const item = replacements[Number(index)];
+      if (!item) return '';
+      return '<button class="glossary-inline-link" type="button" data-glossary-term="' + escapeHtml(item.term) + '">' + escapeHtml(item.term) + '</button>';
+    });
+
+    return rendered;
+  }
+
+  function renderGlossaryList() {
+    const value = $('glossarySearch').value.trim().toLowerCase();
+    const filtered = GLOSSARY_SORTED.filter((entry) => {
+      const haystack = (entry.term + ' ' + glossaryDisplayText(entry.definition)).toLowerCase();
+      return !value || haystack.includes(value);
+    });
+
+    const list = $('glossaryList');
+    const notice = '<p class="glossary-notice">Historical statistics describe past drawings. They do not change the mathematical probability of a properly random future lottery drawing.</p>';
+    if (!filtered.length) {
+      list.innerHTML = notice + '<div class="glossary-empty">No glossary entries match your search.</div>';
+      return;
+    }
+
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const nav = $('glossaryNav');
+    nav.innerHTML = letters.map((letter) => '<button class="' + (filtered.some((entry) => entry.term.toUpperCase().startsWith(letter)) ? 'is-active' : '') + '" type="button" data-glossary-letter="' + letter + '">' + letter + '</button>').join('');
+    nav.querySelectorAll('[data-glossary-letter]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const targetLetter = button.dataset.glossaryLetter;
+        const target = list.querySelector('[data-letter="' + targetLetter + '"]');
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+
+    const groups = {};
+    filtered.forEach((entry) => {
+      const first = (entry.term || 'A').trim().charAt(0).toUpperCase();
+      const key = /[A-Z]/.test(first) ? first : '#';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(entry);
+    });
+
+    const sections = [];
+    letters.forEach((letter) => {
+      if (groups[letter]) sections.push({ letter, entries: groups[letter] });
+    });
+    if (groups['#']) sections.push({ letter: '#', entries: groups['#'] });
+
+    list.innerHTML = notice + sections.map(({ letter, entries }) => {
+      const html = entries.map((entry) => {
+        const termKey = slugForGlossaryTerm(entry.term);
+        const definition = glossaryDisplayText(entry.definition);
+        return '<article class="glossary-entry" id="glossary-entry-' + termKey + '" data-letter="' + letter + '"><h4>' + escapeHtml(entry.term) + '</h4><p>' + glossaryLinkText(definition) + '</p></article>';
+      }).join('');
+      return '<div class="glossary-letter-group" data-letter-section="' + letter + '">' + html + '</div>';
+    }).join('');
+
+    list.querySelectorAll('.glossary-inline-link').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        const term = event.currentTarget.dataset.glossaryTerm;
+        jumpToGlossaryTerm(term);
+      });
+    });
+
+    list.querySelectorAll('.glossary-entry').forEach((entry) => {
+      entry.addEventListener('click', () => {
+        glossaryCurrentTerm = entry.querySelector('h4')?.textContent || glossaryCurrentTerm;
+      });
+    });
+  }
+
+  function jumpToGlossaryTerm(term) {
+    if (!term) return;
+    const entry = GLOSSARY_SORTED.find((item) => item.term.toLowerCase() === String(term).trim().toLowerCase());
+    if (!entry) return;
+    const current = glossaryCurrentTerm || (document.querySelector('.glossary-entry.is-highlighted h4') ? document.querySelector('.glossary-entry.is-highlighted h4').textContent : null);
+    if (current && current.toLowerCase() !== entry.term.toLowerCase() && !glossaryBackStack.includes(current)) {
+      glossaryBackStack.push(current);
+    }
+    glossaryCurrentTerm = entry.term;
+    $('glossaryPrevious').classList.toggle('hidden', glossaryBackStack.length === 0);
+
+    const target = document.getElementById('glossary-entry-' + slugForGlossaryTerm(entry.term));
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.remove('is-highlighted');
+    void target.offsetWidth;
+    target.classList.add('is-highlighted');
+    if (window.glossaryHighlightTimer) window.clearTimeout(window.glossaryHighlightTimer);
+    window.glossaryHighlightTimer = window.setTimeout(() => target.classList.remove('is-highlighted'), 1200);
+  }
+
+  function goToPreviousGlossaryTerm() {
+    const previous = glossaryBackStack.pop();
+    if (!previous) {
+      $('glossaryPrevious').classList.add('hidden');
+      return;
+    }
+    glossaryCurrentTerm = previous;
+    jumpToGlossaryTerm(previous);
+  }
+
+  function openGlossary() {
+    if (glossaryOpen) return;
+    glossaryOpen = true;
+    $('glossaryModal').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    if (!window.history.state || !window.history.state.glossaryOpen) {
+      glossaryHistoryEntry = true;
+      window.history.pushState({ glossaryOpen: true }, '', '#glossary');
+    }
+    renderGlossaryList();
+    setTimeout(() => $('glossarySearch').focus(), 50);
+  }
+
+  function closeGlossary() {
+    if (!glossaryOpen) return;
+    glossaryOpen = false;
+    $('glossaryModal').classList.add('hidden');
+    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen || layoutEditorOpen);
+    if (glossaryHistoryEntry) {
+      suppressGlossaryPop = true;
+      glossaryHistoryEntry = false;
+      window.history.back();
+    }
+  }
+
+  window.openGlossary = openGlossary;
+  window.closeGlossary = closeGlossary;
+
+  window.addEventListener('popstate', () => {
+    if (suppressGlossaryPop) {
+      suppressGlossaryPop = false;
+      return;
+    }
+    if (glossaryOpen) {
+      closeGlossary();
+    }
+  });
 
   function makePick(item, kind) {
     const b = document.createElement('button');
@@ -2718,6 +3196,11 @@ strong { font-weight: 700; }
       applyTheme();
     });
 
+    $('glossaryToggle').addEventListener('click', openGlossary);
+    $('closeGlossary').addEventListener('click', closeGlossary);
+    $('glossaryPrevious').addEventListener('click', goToPreviousGlossaryTerm);
+    $('glossarySearch').addEventListener('input', renderGlossaryList);
+
     $('layoutToggle').addEventListener('click', openLayoutEditor);
     $('closeLayoutEditor').addEventListener('click', closeLayoutEditor);
     $('restoreLayout').addEventListener('click', restoreDefaultLayout);
@@ -2825,6 +3308,9 @@ strong { font-weight: 700; }
       if (layoutEditorOpen && !event.target.closest('#layoutEditor') && !event.target.closest('#layoutToggle') && !event.target.closest('#closeLayoutEditor') && !event.target.closest('.layout-item') && !event.target.closest('.layout-action')) {
         closeLayoutEditor();
       }
+      if (glossaryOpen && !event.target.closest('#glossaryModal') && !event.target.closest('#glossaryToggle') && !event.target.closest('.glossary-inline-link')) {
+        closeGlossary();
+      }
     });
 
     document.addEventListener('keydown', (e) => {
@@ -2832,6 +3318,7 @@ strong { font-weight: 700; }
         if (statePickerOpen) closeStatePicker();
         else if (gamePickerOpen) closeGamePicker();
         else if (layoutEditorOpen) closeLayoutEditor();
+        else if (glossaryOpen) closeGlossary();
       }
     });
   }
