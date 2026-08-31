@@ -2589,8 +2589,10 @@ strong { font-weight: 700; }
 
     const stats = selectedStats();
     const allEntries = entriesFor(stats);
-    const desc = [...allEntries].sort((a, b) => b.count - a.count || a.n - b.n);
-    const asc = [...allEntries].sort((a, b) => a.count - b.count || a.n - b.n);
+    const filteredEntries = freqFilter ? allEntries.filter((x) => String(x.n).includes(freqFilter)) : allEntries;
+    const desc = [...filteredEntries].sort((a, b) => b.count - a.count || a.n - b.n);
+    const asc = [...filteredEntries].sort((a, b) => a.count - b.count || a.n - b.n);
+    const activeFrequencyOrder = sortedEntries(allEntries);
     const ranks = rankMap(allEntries);
     const gapSeen = gapEntries(analysis.all).filter((x) => !x.never).sort((a, b) => b.current - a.current || a.n - b.n);
     const bonusEntries = entriesFor(stats, true);
@@ -2619,7 +2621,7 @@ strong { font-weight: 700; }
           html = top3Text(asc, (x) => previewPill('#' + ranks[x.n] + ' ' + x.n + ' · ' + x.count));
           break;
         case 'fullFrequencyTable':
-          html = top3Text(desc, (x) => previewPill(x.n + ' · ' + x.count));
+          html = top3Text(activeFrequencyOrder, (x) => previewPill(x.n + ' · ' + x.count));
           break;
         case 'bonusBallFrequency':
           html = top3Text(bonusSorted, (x) => previewPill(x.n + ' · ' + x.count));
