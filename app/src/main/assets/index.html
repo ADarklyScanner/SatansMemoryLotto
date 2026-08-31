@@ -469,6 +469,39 @@ strong { font-weight: 700; }
   font-size: 0.75rem;
   line-height: 1.4;
 }
+.accordion-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.accordion-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 220px;
+  min-width: 0;
+}
+.accordion-preview .preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: var(--text);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accordion-preview .preview-pill strong {
+  font-size: 0.68rem;
+}
 .accordion-toggle-icon {
   font-size: 1.2rem;
   color: var(--muted);
@@ -486,6 +519,13 @@ strong { font-weight: 700; }
 }
 .accordion-card.open > .accordion-body {
   display: block;
+}
+#frequencyExplorerPanel > .accordion-card > .accordion-body,
+#gapExplorerPanel > .accordion-card > .accordion-body,
+#patternStatsPanel > .accordion-card > .accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .section-title {
@@ -883,14 +923,14 @@ strong { font-weight: 700; }
       <p class="status" style="margin-top: 10px;">Results download in batches of up to 100 draws and continue until the archive is exhausted. Final picks are generated only after the full history finishes.</p>
     </section>
 
-    <section id="resultsPanel" class="panel hidden" data-panel-key="resultsPanel">
-      <div class="accordion-card open">
+    <section id="generatedSetsPanel" class="panel hidden" data-panel-key="generatedSetsPanel">
+      <div class="accordion-card open" data-preview-type="generatedSets">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Generated sets</h3>
             <span class="accordion-summary">Primary picks built from the full downloaded archive</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div id="summary" class="status"></div>
@@ -905,14 +945,16 @@ strong { font-weight: 700; }
           <div id="actionStatus" class="status" style="margin-top: 10px;"></div>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="frequencyExplorerPanel" class="panel hidden" data-panel-key="frequencyExplorerPanel">
+      <div class="accordion-card open" data-preview-type="frequencyExplorer">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Frequency explorer</h3>
             <span class="accordion-summary">Hot/cold, rankings, and recent-window views</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div class="controls" style="margin-top: 8px;">
@@ -922,77 +964,210 @@ strong { font-weight: 700; }
             <button id="view100" class="pill seg" type="button">Last 100</button>
           </div>
           <div id="viewLabel" class="status" style="margin-top: 8px;"></div>
-          <div class="freq-grid" style="margin-top: 10px;">
-            <div class="bucket"><h3>🔥 Hot numbers</h3><div id="hot" class="freq"></div></div>
-            <div class="bucket"><h3>❄️ Cold numbers</h3><div id="cold" class="freq"></div></div>
-          </div>
-          <h3 class="section-title">Full frequency table</h3>
-          <input id="freqFilter" class="text-input" type="text" placeholder="Filter number, e.g. 31" aria-label="Filter frequency table">
-          <div class="controls" style="margin-top: 8px;">
-            <button id="sortHot" class="pill seg is-active" type="button">Hot → cold</button>
-            <button id="sortCold" class="pill seg" type="button">Cold → hot</button>
-            <button id="sortNumber" class="pill seg" type="button">Number order</button>
-          </div>
-          <div class="status" style="margin-top: 8px;">Rank is based on appearance count in the selected history view.</div>
-          <div id="freq" class="freq" style="margin-top: 10px;"></div>
-          <div id="bonusSection" class="hidden" style="margin-top: 12px;">
-            <h3 class="section-title">Bonus-ball frequency</h3>
-            <div id="bonusFreq" class="freq"></div>
-          </div>
-          <h3 class="section-title">Frequency chart</h3>
-          <div id="freqChart" class="chart"></div>
-          <div class="status" style="margin-top: 8px;">Recent windows are comparison-only. They never replace the complete historical archive used for the three primary sets.</div>
+
+          <section id="hotNumbersPanel" class="panel-inline" data-panel-key="hotNumbersPanel" data-preview-type="hotNumbers">
+            <div class="accordion-card open" data-preview-type="hotNumbers">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Hot numbers</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="hot" class="freq"></div></div>
+            </div>
+          </section>
+
+          <section id="coldNumbersPanel" class="panel-inline" data-panel-key="coldNumbersPanel" data-preview-type="coldNumbers">
+            <div class="accordion-card open" data-preview-type="coldNumbers">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Cold numbers</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="cold" class="freq"></div></div>
+            </div>
+          </section>
+
+          <section id="fullFrequencyTablePanel" class="panel-inline" data-panel-key="fullFrequencyTablePanel" data-preview-type="fullFrequencyTable">
+            <div class="accordion-card open" data-preview-type="fullFrequencyTable">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Full frequency table</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body">
+                <input id="freqFilter" class="text-input" type="text" placeholder="Filter number, e.g. 31" aria-label="Filter frequency table">
+                <div class="controls" style="margin-top: 8px;">
+                  <button id="sortHot" class="pill seg is-active" type="button">Hot → cold</button>
+                  <button id="sortCold" class="pill seg" type="button">Cold → hot</button>
+                  <button id="sortNumber" class="pill seg" type="button">Number order</button>
+                </div>
+                <div class="status" style="margin-top: 8px;">Rank is based on appearance count in the selected history view.</div>
+                <div id="freq" class="freq" style="margin-top: 10px;"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="bonusBallFrequencyPanel" class="panel-inline" data-panel-key="bonusBallFrequencyPanel" data-preview-type="bonusBallFrequency">
+            <div class="accordion-card open" data-preview-type="bonusBallFrequency">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Bonus-ball frequency</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="bonusSection" class="hidden"><div id="bonusFreq" class="freq"></div></div></div>
+            </div>
+          </section>
+
+          <section id="frequencyChartPanel" class="panel-inline" data-panel-key="frequencyChartPanel" data-preview-type="frequencyChart">
+            <div class="accordion-card open" data-preview-type="frequencyChart">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Frequency chart</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body">
+                <div id="freqChart" class="chart"></div>
+                <div class="status" style="margin-top: 8px;">Recent windows are comparison-only. They never replace the complete historical archive used for the three primary sets.</div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="gapExplorerPanel" class="panel hidden" data-panel-key="gapExplorerPanel">
+      <div class="accordion-card open" data-preview-type="gapExplorer">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Gap &amp; overdue explorer</h3>
             <span class="accordion-summary">Current gap, average gap, and overdue numbers</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div class="status" style="margin-top: 8px;">Current gap = draws since last appearance. Average and maximum gaps use the full archive.</div>
-          <div class="freq-grid" style="margin-top: 10px;">
-            <div class="bucket"><h3>Most overdue</h3><div id="overdueTop" class="freq"></div></div>
-            <div class="bucket"><h3>Least overdue</h3><div id="overdueLow" class="freq"></div></div>
-          </div>
-          <div id="gapTable" class="freq" style="margin-top: 10px;"></div>
-          <div id="bonusGapSection" class="hidden" style="margin-top: 12px;">
-            <h3 class="section-title">Bonus-ball gaps</h3>
-            <div id="bonusGap" class="freq"></div>
-          </div>
-          <h3 class="section-title">Current-gap chart</h3>
-          <div id="gapChart" class="chart"></div>
+
+          <section id="mainNumberGapsPanel" class="panel-inline" data-panel-key="mainNumberGapsPanel" data-preview-type="mainNumberGaps">
+            <div class="accordion-card open" data-preview-type="mainNumberGaps">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Main-number gaps</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="gapTable" class="freq" style="margin-top: 10px;"></div></div>
+            </div>
+          </section>
+
+          <section id="bonusBallGapsPanel" class="panel-inline" data-panel-key="bonusBallGapsPanel" data-preview-type="bonusBallGaps">
+            <div class="accordion-card open" data-preview-type="bonusBallGaps">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Bonus-ball gaps</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="bonusGapSection" class="hidden"><div id="bonusGap" class="freq"></div></div></div>
+            </div>
+          </section>
+
+          <section id="currentGapChartPanel" class="panel-inline" data-panel-key="currentGapChartPanel" data-preview-type="currentGapChart">
+            <div class="accordion-card open" data-preview-type="currentGapChart">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Current-gap chart</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="gapChart" class="chart"></div></div>
+            </div>
+          </section>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="patternStatsPanel" class="panel hidden" data-panel-key="patternStatsPanel">
+      <div class="accordion-card open" data-preview-type="patternStats">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Advanced full-history patterns</h3>
             <span class="accordion-summary">Pairs, triples, odd/even, and consecutive patterns</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div id="patternStats" class="pattern-grid"></div>
-          <div class="freq-grid" style="margin-top: 10px;">
-            <div class="bucket"><h3>Common pairs</h3><div id="pairs" class="freq"></div></div>
-            <div class="bucket"><h3>Common triples</h3><div id="triples" class="freq"></div></div>
-          </div>
+
+          <section id="pairStatisticsPanel" class="panel-inline" data-panel-key="pairStatisticsPanel" data-preview-type="pairStatistics">
+            <div class="accordion-card open" data-preview-type="pairStatistics">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Pair statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="pairs" class="freq"></div></div>
+            </div>
+          </section>
+
+          <section id="tripleStatisticsPanel" class="panel-inline" data-panel-key="tripleStatisticsPanel" data-preview-type="tripleStatistics">
+            <div class="accordion-card open" data-preview-type="tripleStatistics">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Triple statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div id="triples" class="freq"></div></div>
+            </div>
+          </section>
+
+          <section id="oddEvenStatsPanel" class="panel-inline" data-panel-key="oddEvenStatsPanel" data-preview-type="oddEvenStats">
+            <div class="accordion-card open" data-preview-type="oddEvenStats">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Odd/even statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div class="status">Most common odd/even split is summarized in the aggregate pattern metrics.</div></div>
+            </div>
+          </section>
+
+          <section id="highLowStatsPanel" class="panel-inline" data-panel-key="highLowStatsPanel" data-preview-type="highLowStats">
+            <div class="accordion-card open" data-preview-type="highLowStats">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>High/low statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div class="status">Most common high/low split is summarized in the aggregate pattern metrics.</div></div>
+            </div>
+          </section>
+
+          <section id="sumDistributionPanel" class="panel-inline" data-panel-key="sumDistributionPanel" data-preview-type="sumDistribution">
+            <div class="accordion-card open" data-preview-type="sumDistribution">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Sum distribution</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div class="status">Most common sum bucket is summarized in the aggregate pattern metrics.</div></div>
+            </div>
+          </section>
+
+          <section id="consecutiveNumbersPanel" class="panel-inline" data-panel-key="consecutiveNumbersPanel" data-preview-type="consecutiveNumbers">
+            <div class="accordion-card open" data-preview-type="consecutiveNumbers">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Consecutive-number statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div class="status">Consecutive-number frequency is summarized in the aggregate pattern metrics.</div></div>
+            </div>
+          </section>
+
+          <section id="repeatPreviousStatsPanel" class="panel-inline" data-panel-key="repeatPreviousStatsPanel" data-preview-type="repeatPreviousStats">
+            <div class="accordion-card open" data-preview-type="repeatPreviousStats">
+              <button class="accordion-button" type="button" aria-expanded="true">
+                <span class="title-wrap"><h3>Repeat-from-previous-draw statistics</h3></span>
+                <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+              </button>
+              <div class="accordion-body"><div class="status">Repeat-from-previous frequency is summarized in the aggregate pattern metrics.</div></div>
+            </div>
+          </section>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="customWeightedSetPanel" class="panel hidden" data-panel-key="customWeightedSetPanel">
+      <div class="accordion-card open" data-preview-type="customWeightedSet">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Custom weighted set</h3>
             <span class="accordion-summary">Optional fourth model without changing Sets 1–3</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div class="status" style="margin-top: 8px;">Optional fourth model. It does not change the primary generated sets.</div>
@@ -1007,14 +1182,16 @@ strong { font-weight: 700; }
           <div id="customSet" class="set hidden" style="margin-top: 10px;"></div>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="historicalDrawsPanel" class="panel hidden" data-panel-key="historicalDrawsPanel">
+      <div class="accordion-card open" data-preview-type="historicalDraws">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Historical draws</h3>
             <span class="accordion-summary">Searchable archive and recent draw history</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div class="field-row" style="margin-top: 8px;">
@@ -1024,14 +1201,16 @@ strong { font-weight: 700; }
           <div id="historyList" class="history-list"></div>
         </div>
       </div>
+    </section>
 
-      <div class="accordion-card open">
+    <section id="savedPicksPanel" class="panel hidden" data-panel-key="savedPicksPanel">
+      <div class="accordion-card open" data-preview-type="savedPicks">
         <button class="accordion-button" type="button" aria-expanded="true">
           <span class="title-wrap">
             <h3>Saved picks</h3>
             <span class="accordion-summary">Saved combinations and prior selections</span>
           </span>
-          <span class="accordion-toggle-icon">⌃</span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
         </button>
         <div class="accordion-body">
           <div id="savedSets" class="saved-sets"></div>
@@ -1077,7 +1256,37 @@ strong { font-weight: 700; }
   const CACHE_DB = 'lfp_history_cache_v1';
   const LAYOUT_KEY = 'lfp_dashboard_layout_v1';
   const ACCORDION_KEY = 'lfp_accordion_state_v1';
-  const DEFAULT_LAYOUT = { version: 1, order: ['statePanel', 'gamePanel', 'analyzePanel', 'resultsPanel'], hidden: [] };
+  const DEFAULT_LAYOUT = {
+    version: 1,
+    order: [
+      'statePanel',
+      'gamePanel',
+      'analyzePanel',
+      'generatedSetsPanel',
+      'frequencyExplorerPanel',
+      'hotNumbersPanel',
+      'coldNumbersPanel',
+      'fullFrequencyTablePanel',
+      'bonusBallFrequencyPanel',
+      'frequencyChartPanel',
+      'gapExplorerPanel',
+      'mainNumberGapsPanel',
+      'bonusBallGapsPanel',
+      'currentGapChartPanel',
+      'patternStatsPanel',
+      'pairStatisticsPanel',
+      'tripleStatisticsPanel',
+      'oddEvenStatsPanel',
+      'highLowStatsPanel',
+      'sumDistributionPanel',
+      'consecutiveNumbersPanel',
+      'repeatPreviousStatsPanel',
+      'customWeightedSetPanel',
+      'historicalDrawsPanel',
+      'savedPicksPanel'
+    ],
+    hidden: []
+  };
 
   let selectedState = null;
   let selectedGame = null;
@@ -1146,13 +1355,19 @@ strong { font-weight: 700; }
 
   function layoutPrefs() {
     const saved = storeGet(LAYOUT_KEY, DEFAULT_LAYOUT);
-    const order = Array.isArray(saved.order) && saved.order.length ? saved.order : DEFAULT_LAYOUT.order.slice();
-    const hidden = Array.isArray(saved.hidden) ? saved.hidden : [];
-    return { version: 1, order, hidden };
+    const order = Array.isArray(saved.order) ? saved.order.slice() : DEFAULT_LAYOUT.order.slice();
+    const hidden = Array.isArray(saved.hidden) ? saved.hidden.slice() : [];
+    const registered = [...document.querySelectorAll('[data-panel-key]')].map((el) => el.dataset.panelKey);
+    const mergedOrder = order.filter((key) => registered.includes(key)).concat(registered.filter((key) => !order.includes(key)));
+    const uniqueOrder = mergedOrder.filter((key, idx, arr) => arr.indexOf(key) === idx);
+    const finalHidden = uniqueOrder.filter((key) => hidden.includes(key));
+    return { version: 1, order: uniqueOrder, hidden: finalHidden.filter((key, idx, arr) => arr.indexOf(key) === idx) };
   }
 
   function saveLayoutPrefs(value) {
-    storeSet(LAYOUT_KEY, { version: 1, order: value.order || DEFAULT_LAYOUT.order.slice(), hidden: value.hidden || [] });
+    const order = Array.isArray(value.order) && value.order.length ? value.order.slice() : DEFAULT_LAYOUT.order.slice();
+    const hidden = Array.isArray(value.hidden) ? value.hidden.slice() : [];
+    storeSet(LAYOUT_KEY, { version: 1, order, hidden });
   }
 
   function accordionPrefs() {
@@ -1424,7 +1639,13 @@ strong { font-weight: 700; }
     $('gameStatus').className = 'status';
     $('retryGames').classList.add('hidden');
     $('gamePicker').classList.remove('hidden');
-    $('resultsPanel').classList.add('hidden');
+    $('generatedSetsPanel').classList.add('hidden');
+    $('frequencyExplorerPanel').classList.add('hidden');
+    $('gapExplorerPanel').classList.add('hidden');
+    $('patternStatsPanel').classList.add('hidden');
+    $('customWeightedSetPanel').classList.add('hidden');
+    $('historicalDrawsPanel').classList.add('hidden');
+    $('savedPicksPanel').classList.add('hidden');
     $('progressWrap').classList.add('hidden');
     gamesEl.innerHTML = '';
 
@@ -1456,7 +1677,7 @@ strong { font-weight: 700; }
     closeGamePicker();
     updateSelectorLabels();
     $('analyzePanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    $('resultsPanel').classList.add('hidden');
+    $('generatedSetsPanel').classList.add('hidden');
     $('progressWrap').classList.add('hidden');
   }
 
@@ -1902,6 +2123,7 @@ strong { font-weight: 700; }
       const br = rankMap(bonus);
       $('bonusFreq').innerHTML = sortedEntries(bonus).map((x) => rankedChip(x, br[x.n])).join('');
     }
+    updateAccordionPreviews();
   }
 
   function gapEntries(stats, bonus = false) {
@@ -1926,6 +2148,7 @@ strong { font-weight: 700; }
     const b = gapEntries(analysis.all, true);
     $('bonusGapSection').classList.toggle('hidden', !b.length);
     if (b.length) $('bonusGap').innerHTML = b.sort((a, c) => (c.current || 0) - (a.current || 0)).map(gapChip).join('');
+    updateAccordionPreviews();
   }
 
   function combinations(a, k) {
@@ -1991,6 +2214,7 @@ strong { font-weight: 700; }
       $('patternStats').innerHTML = '<div class="stat"><strong>Digit game</strong><span>pair/triple combination analysis skipped because position matters</span></div>';
       $('pairs').innerHTML = '';
       $('triples').innerHTML = '';
+      updateAccordionPreviews();
       return;
     }
 
@@ -2004,6 +2228,7 @@ strong { font-weight: 700; }
     ].join('');
     $('pairs').innerHTML = p.pairs.map((x) => '<span class="chip"><strong>' + escapeHtml(x[0]) + '</strong> · ' + x[1] + '×</span>').join('');
     $('triples').innerHTML = p.triples.map((x) => '<span class="chip"><strong>' + escapeHtml(x[0]) + '</strong> · ' + x[1] + '×</span>').join('');
+    updateAccordionPreviews();
   }
 
   function parseNums(s) {
@@ -2134,25 +2359,38 @@ strong { font-weight: 700; }
     setStatus('actionStatus', 'Saved current three sets.', 'good');
   }
 
-  function renderSaved() {
-    const arr = savedSets();
-    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="status">No saved picks yet.</div>';
-  }
-
-  function renderHistory() {
+  function filteredHistoryRows() {
     const q = $('historySearch').value.trim().toLowerCase();
-    const filtered = fullRows.filter((r) => {
+    return fullRows.filter((r) => {
       if (!q) return true;
       const text = [r.draw_date, r.draw_number, (r.numbers || []).join(' '), r.bonus_ball].join(' ').toLowerCase();
       return text.includes(q);
     });
+  }
+
+  function renderSaved() {
+    const arr = savedSets();
+    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="status">No saved picks yet.</div>';
+    updateAccordionPreviews();
+  }
+
+  function renderHistory() {
+    const filtered = filteredHistoryRows();
     const rows = filtered.slice(0, historyLimit);
     $('historyList').innerHTML = rows.map((r) => '<div class="history-row"><strong>' + escapeHtml(r.draw_date || 'Unknown date') + '</strong>' + (r.draw_number != null ? '<small>Draw ' + escapeHtml(r.draw_number) + '</small>' : '') + '<div class="draw-numbers">' + escapeHtml((r.numbers || []).join(', ')) + (r.bonus_ball != null ? ' <b>+ ' + escapeHtml(r.bonus_ball) + '</b>' : '') + '</div></div>').join('') || '<div class="status">No matching draws.</div>';
     $('historyMore').classList.toggle('hidden', filtered.length <= historyLimit);
+    updateAccordionPreviews();
   }
 
   function renderResults(fetchInfo) {
-    $('resultsPanel').classList.remove('hidden');
+    $('generatedSetsPanel').classList.remove('hidden');
+    $('frequencyExplorerPanel').classList.remove('hidden');
+    $('gapExplorerPanel').classList.remove('hidden');
+    $('patternStatsPanel').classList.remove('hidden');
+    $('customWeightedSetPanel').classList.remove('hidden');
+    $('historicalDrawsPanel').classList.remove('hidden');
+    $('savedPicksPanel').classList.remove('hidden');
+
     const dates = fullRows.map((r) => r.draw_date).filter(Boolean).sort();
     const earliest = dates[0] || null;
     const latest = dates[dates.length - 1] || null;
@@ -2191,11 +2429,13 @@ strong { font-weight: 700; }
     const config = layoutPrefs();
     const order = config.order && config.order.length ? config.order.slice() : DEFAULT_LAYOUT.order.slice();
     const hidden = new Set(config.hidden || []);
-    const sections = [...document.querySelectorAll('#mainSections > [data-panel-key]')];
+    const sections = [...document.querySelectorAll('[data-panel-key]')];
     const ordered = [];
     for (const key of order) {
       const sec = sections.find((el) => el.dataset.panelKey === key);
-      if (sec && !hidden.has(key)) ordered.push(sec);
+      if (sec) {
+        if (!hidden.has(key)) ordered.push(sec);
+      }
     }
     for (const sec of sections) {
       if (!ordered.includes(sec)) ordered.push(sec);
@@ -2204,18 +2444,23 @@ strong { font-weight: 700; }
       sec.style.order = String(index + 1);
       sec.classList.toggle('hidden', hidden.has(sec.dataset.panelKey));
     });
-    $('statePanel').classList.remove('hidden');
-    $('gamePanel').classList.remove('hidden');
+    if ($('statePanel')) $('statePanel').classList.remove('hidden');
+    if ($('gamePanel')) $('gamePanel').classList.remove('hidden');
   }
 
   function movePanel(key, delta) {
     const config = layoutPrefs();
-    if (['statePanel', 'gamePanel'].includes(key)) return;
     const idx = config.order.indexOf(key);
     if (idx < 0) return;
-    const nextIdx = idx + delta;
-    if (nextIdx < 0 || nextIdx >= config.order.length) return;
+    const panel = document.getElementById(key);
+    if (!panel) return;
+    const siblingKeys = [...panel.parentElement.querySelectorAll(':scope > [data-panel-key]')].map((el) => el.dataset.panelKey);
+    const siblingIndex = siblingKeys.indexOf(key);
+    const nextSiblingIndex = siblingIndex + delta;
+    if (siblingIndex < 0 || nextSiblingIndex < 0 || nextSiblingIndex >= siblingKeys.length) return;
+    const nextKey = siblingKeys[nextSiblingIndex];
     const order = config.order.slice();
+    const nextIdx = order.indexOf(nextKey);
     [order[idx], order[nextIdx]] = [order[nextIdx], order[idx]];
     config.order = order;
     saveLayoutPrefs(config);
@@ -2225,7 +2470,6 @@ strong { font-weight: 700; }
 
   function togglePanelVisible(key, visible) {
     const config = layoutPrefs();
-    if (['statePanel', 'gamePanel'].includes(key)) return;
     const hidden = config.hidden || [];
     if (visible) {
       config.hidden = hidden.filter((v) => v !== key);
@@ -2248,7 +2492,35 @@ strong { font-weight: 700; }
       statePanel: 'State',
       gamePanel: 'Game',
       analyzePanel: 'Analyze',
-      resultsPanel: 'Results'
+      generatedSetsPanel: 'Generated Sets',
+      frequencyExplorerPanel: 'Frequency Explorer',
+      hotNumbersPanel: 'Hot Numbers',
+      coldNumbersPanel: 'Cold Numbers',
+      fullFrequencyTablePanel: 'Full Frequency Table',
+      bonusBallFrequencyPanel: 'Bonus-Ball Frequency',
+      frequencyChartPanel: 'Frequency Chart',
+      gapExplorerPanel: 'Gap & Overdue',
+      mainNumberGapsPanel: 'Main-Number Gaps',
+      bonusBallGapsPanel: 'Bonus-Ball Gaps',
+      currentGapChartPanel: 'Current-Gap Chart',
+      patternStatsPanel: 'Pattern Statistics',
+      pairStatisticsPanel: 'Pair Statistics',
+      tripleStatisticsPanel: 'Triple Statistics',
+      oddEvenStatsPanel: 'Odd/Even',
+      highLowStatsPanel: 'High/Low',
+      sumDistributionPanel: 'Sum Distribution',
+      consecutiveNumbersPanel: 'Consecutive Numbers',
+      repeatPreviousStatsPanel: 'Repeat-from-Previous',
+      customWeightedSetPanel: 'Custom Weighted Set',
+      preferredAvoidedNumbersPanel: 'Preferred / Avoided Numbers',
+      historicalDrawsPanel: 'Historical Draws',
+      savedPicksPanel: 'Saved Picks',
+      modelScoresPanel: 'Model Scores / Model Details',
+      fullHistorySummaryPanel: 'Full-History Summary',
+      progressiveHistoryPanel: 'Progressive History',
+      last100ComparisonPanel: 'Last 100 Comparison',
+      last500ComparisonPanel: 'Last 500 Comparison',
+      last1000ComparisonPanel: 'Last 1000 Comparison'
     };
     return map[key] || key.replace(/Panel$/, '').replace(/([A-Z])/g, ' $1').trim();
   }
@@ -2285,8 +2557,9 @@ strong { font-weight: 700; }
 
   function initAccordions() {
     const saved = accordionPrefs();
-    document.querySelectorAll('.accordion-card').forEach((card) => {
-      const key = card.querySelector('.accordion-button')?.textContent.replace(/\s+/g, ' ').trim() || card.dataset.key || 'section';
+    document.querySelectorAll('.accordion-card').forEach((card, index) => {
+      const key = card.dataset.accordionKey || card.dataset.panelKey || card.closest('[data-panel-key]')?.dataset.panelKey || 'section-' + index;
+      card.dataset.accordionKey = key;
       const isOpen = saved[key] !== false;
       card.classList.toggle('open', isOpen);
       const button = card.querySelector('.accordion-button');
@@ -2301,6 +2574,97 @@ strong { font-weight: 700; }
           saveAccordionPrefs(state);
         });
       }
+    });
+    updateAccordionPreviews();
+  }
+
+  function updateAccordionPreviews() {
+    if (!analysis) {
+      document.querySelectorAll('.accordion-card[data-preview-type]').forEach((card) => {
+        const preview = card.querySelector('.accordion-preview');
+        if (preview) preview.innerHTML = '<span class="preview-pill">—</span>';
+      });
+      return;
+    }
+
+    const stats = selectedStats();
+    const allEntries = entriesFor(stats);
+    const desc = [...allEntries].sort((a, b) => b.count - a.count || a.n - b.n);
+    const asc = [...allEntries].sort((a, b) => a.count - b.count || a.n - b.n);
+    const ranks = rankMap(allEntries);
+    const gapSeen = gapEntries(analysis.all).filter((x) => !x.never).sort((a, b) => b.current - a.current || a.n - b.n);
+    const bonusEntries = entriesFor(stats, true);
+    const bonusSorted = [...bonusEntries].sort((a, b) => b.count - a.count || a.n - b.n);
+    const bonusGapEntries = gapEntries(analysis.all, true).sort((a, b) => (b.current || 0) - (a.current || 0) || a.n - b.n);
+    const pairList = patternAnalysis(fullRows, analysis.all).pairs || [];
+    const tripleList = patternAnalysis(fullRows, analysis.all).triples || [];
+
+    document.querySelectorAll('.accordion-card[data-preview-type]').forEach((card) => {
+      const preview = card.querySelector('.accordion-preview');
+      if (!preview) return;
+      const type = card.dataset.previewType;
+      let html = '';
+
+      const previewPill = (label) => '<span class="preview-pill">' + escapeHtml(label) + '</span>';
+      const top3Text = (items, mapper) => items.slice(0, 3).map(mapper).join('');
+
+      switch (type) {
+        case 'generatedSets':
+          html = top3Text(analysis.sets || [], (s, i) => previewPill('Set ' + (i + 1) + ': ' + setText(s)));
+          break;
+        case 'hotNumbers':
+          html = top3Text(desc, (x) => previewPill('#' + ranks[x.n] + ' ' + x.n + ' · ' + x.count));
+          break;
+        case 'coldNumbers':
+          html = top3Text(asc, (x) => previewPill('#' + ranks[x.n] + ' ' + x.n + ' · ' + x.count));
+          break;
+        case 'fullFrequencyTable':
+          html = top3Text(desc, (x) => previewPill(x.n + ' · ' + x.count));
+          break;
+        case 'bonusBallFrequency':
+          html = top3Text(bonusSorted, (x) => previewPill(x.n + ' · ' + x.count));
+          break;
+        case 'frequencyChart':
+          html = previewPill('Top: ' + desc[0].n + ' · ' + desc[0].count + '×');
+          break;
+        case 'mainNumberGaps':
+          html = top3Text(gapSeen, (x) => previewPill(x.n + ' · ' + (x.never ? 'never' : x.current) + ' draws'));
+          break;
+        case 'bonusBallGaps':
+          html = top3Text(bonusGapEntries, (x) => previewPill(x.n + ' · ' + (x.never ? 'never' : x.current) + ' draws'));
+          break;
+        case 'currentGapChart':
+          html = gapSeen.length ? previewPill('Most overdue: ' + gapSeen[0].n + ' · ' + gapSeen[0].current + ' draws') : previewPill('No gap data');
+          break;
+        case 'pairStatistics':
+          html = top3Text(pairList, (x) => previewPill(x[0] + ' · ' + x[1] + '×'));
+          break;
+        case 'tripleStatistics':
+          html = top3Text(tripleList, (x) => previewPill(x[0] + ' · ' + x[1] + '×'));
+          break;
+        case 'patternStats': {
+          const pattern = patternAnalysis(fullRows, analysis.all);
+          html = top3Text([
+            { label: 'Consecutive', value: pattern.consecutivePct.toFixed(1) + '%' },
+            { label: 'Repeat average', value: pattern.repeatAvg.toFixed(2) },
+            { label: 'Odd/even mode', value: modeText(pattern.oddDist || {}, ' odd') }
+          ], (x) => previewPill(x.label + ': ' + x.value));
+          break;
+        }
+        case 'customWeightedSet':
+          html = $('customSet').classList.contains('hidden') ? previewPill('No custom set') : top3Text([...$('customSet').querySelectorAll('.ball')], (ball) => previewPill(ball.textContent));
+          break;
+        case 'historicalDraws':
+          html = top3Text(filteredHistoryRows() || [], (r) => previewPill((r.draw_date || 'Unknown') + ' · ' + String((r.numbers || []).slice(0, 5).join(', '))));
+          break;
+        case 'savedPicks':
+          html = top3Text(savedSets().slice(0, 3), (x) => previewPill(String(x.state || 'Saved') + ' · ' + String((x.sets && x.sets[0] && x.sets[0].main) ? x.sets[0].main.join(', ') : '')));
+          break;
+        default:
+          html = '<span class="preview-pill">—</span>';
+      }
+
+      preview.innerHTML = html || '<span class="preview-pill">—</span>';
     });
   }
 
@@ -2387,7 +2751,7 @@ strong { font-weight: 700; }
       const b = $('analyze');
       b.disabled = true;
       $('progressWrap').classList.remove('hidden');
-      $('resultsPanel').classList.add('hidden');
+      $('generatedSetsPanel').classList.add('hidden');
       $('liveTop').innerHTML = '';
       $('progress').style.width = '2%';
       $('progressText').className = 'status';
@@ -2404,7 +2768,7 @@ strong { font-weight: 700; }
         analysis = analyzeAll(fullRows, selectedGame);
         renderResults(fi);
         $('progressText').textContent = fi.cached ? 'Cached full-history analysis complete.' : 'FULL HISTORY LOADED · ' + fullRows.length + ' drawings analyzed · ' + fi.pages + ' batches';
-        $('resultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('generatedSetsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) {
         $('progressText').textContent = 'Analysis failed: ' + userError(e);
         $('progressText').className = 'status err';
