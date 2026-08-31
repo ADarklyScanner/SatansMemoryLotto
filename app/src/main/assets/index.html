@@ -178,6 +178,7 @@ body.modal-open { overflow: hidden; }
 body * { min-width: 0; }
 button, input { font: inherit; }
 button { cursor: pointer; }
+button, [type="button"], [type="search"], [type="text"], input { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, input:focus-visible, .accordion-button:focus-visible {
   outline: 3px solid rgba(37, 99, 235, 0.28);
   outline-offset: 2px;
@@ -196,6 +197,7 @@ strong { font-weight: 700; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 8px 4px 10px;
   margin: 0 0 var(--panel-gap);
@@ -214,6 +216,9 @@ strong { font-weight: 700; }
   font-weight: 800;
   letter-spacing: -0.03em;
   font-family: "ITC Fenice", "Bordeaux Bold", "Cinzel", Georgia, serif;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .brand-badge {
   display: inline-flex;
@@ -236,6 +241,11 @@ strong { font-weight: 700; }
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  max-width: 100%;
+}
+.topbar-actions > * {
+  flex: 0 1 auto;
+  max-width: 100%;
 }
 
 .main-sections {
@@ -379,7 +389,7 @@ strong { font-weight: 700; }
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   overflow: hidden;
-  padding: 12px 12px 16px;
+  padding: 12px 12px calc(16px + var(--safe-bottom));
   transform: translateY(0);
   transition: transform 0.22s ease;
 }
@@ -554,6 +564,7 @@ strong { font-weight: 700; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 14px 14px 12px;
   text-align: left;
@@ -561,7 +572,7 @@ strong { font-weight: 700; }
 }
 .accordion-button .title-wrap {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 180px;
 }
 .accordion-button .title-wrap h3 {
   margin: 0;
@@ -580,6 +591,8 @@ strong { font-weight: 700; }
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .accordion-preview {
   display: flex;
@@ -845,7 +858,7 @@ strong { font-weight: 700; }
 .layout-editor.hidden { display: none; }
 .layout-sheet {
   position: absolute;
-  inset: 14px 10px 14px 10px;
+  inset: calc(14px + var(--safe-top)) 10px calc(14px + var(--safe-bottom)) 10px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -898,6 +911,7 @@ strong { font-weight: 700; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1074,8 +1088,33 @@ strong { font-weight: 700; }
   .field-row, .freq-grid, .pattern-grid, .stats-grid { grid-template-columns: 1fr; }
   .slider-row { grid-template-columns: 1fr; }
   .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .topbar { align-items: flex-start; }
-  .topbar-actions { max-width: 100%; }
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .brand {
+    width: 100%;
+  }
+  .topbar-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .topbar-actions > * {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+  }
+  .accordion-button {
+    align-items: flex-start;
+  }
+  .accordion-side {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .accordion-preview {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .appearance-modal {
@@ -1999,13 +2038,20 @@ strong { font-weight: 700; }
     $('gameTrigger').setAttribute('aria-expanded', String(gamePickerOpen));
   }
 
+  function syncBodyModalState() {
+    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen || layoutEditorOpen || appearanceOpen || glossaryOpen);
+  }
+
   function openStatePicker() {
     closeGamePicker();
+    closeLayoutEditor();
+    closeAppearance();
+    closeGlossary();
     statePickerOpen = true;
     $('statePicker').classList.remove('hidden');
     $('stateTrigger').classList.add('is-active');
     $('stateSearch').focus();
-    document.body.classList.add('modal-open');
+    syncBodyModalState();
     updateSelectorLabels();
   }
 
@@ -2013,17 +2059,20 @@ strong { font-weight: 700; }
     statePickerOpen = false;
     $('statePicker').classList.add('hidden');
     $('stateTrigger').classList.remove('is-active');
-    document.body.classList.toggle('modal-open', gamePickerOpen || layoutEditorOpen);
+    syncBodyModalState();
     updateSelectorLabels();
   }
 
   function openGamePicker() {
     closeStatePicker();
+    closeLayoutEditor();
+    closeAppearance();
+    closeGlossary();
     gamePickerOpen = true;
     $('gamePicker').classList.remove('hidden');
     $('gameTrigger').classList.add('is-active');
     $('gameSearch').focus();
-    document.body.classList.add('modal-open');
+    syncBodyModalState();
     updateSelectorLabels();
   }
 
@@ -2031,21 +2080,25 @@ strong { font-weight: 700; }
     gamePickerOpen = false;
     $('gamePicker').classList.add('hidden');
     $('gameTrigger').classList.remove('is-active');
-    document.body.classList.toggle('modal-open', statePickerOpen || layoutEditorOpen);
+    syncBodyModalState();
     updateSelectorLabels();
   }
 
   function openLayoutEditor() {
+    closeStatePicker();
+    closeGamePicker();
+    closeAppearance();
+    closeGlossary();
     layoutEditorOpen = true;
     $('layoutEditor').classList.remove('hidden');
-    document.body.classList.add('modal-open');
+    syncBodyModalState();
     renderLayoutEditor();
   }
 
   function closeLayoutEditor() {
     layoutEditorOpen = false;
     $('layoutEditor').classList.add('hidden');
-    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen);
+    syncBodyModalState();
   }
 
   function slugForGlossaryTerm(term) {
@@ -2192,9 +2245,13 @@ strong { font-weight: 700; }
 
   function openGlossary() {
     if (glossaryOpen) return;
+    closeStatePicker();
+    closeGamePicker();
+    closeLayoutEditor();
+    closeAppearance();
     glossaryOpen = true;
     $('glossaryModal').classList.remove('hidden');
-    document.body.classList.add('modal-open');
+    syncBodyModalState();
     if (!window.history.state || !window.history.state.glossaryOpen) {
       glossaryHistoryEntry = true;
       window.history.pushState({ glossaryOpen: true }, '', '#glossary');
@@ -2207,7 +2264,7 @@ strong { font-weight: 700; }
     if (!glossaryOpen) return;
     glossaryOpen = false;
     $('glossaryModal').classList.add('hidden');
-    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen || layoutEditorOpen);
+    syncBodyModalState();
     if (glossaryHistoryEntry) {
       suppressGlossaryPop = true;
       glossaryHistoryEntry = false;
@@ -3278,9 +3335,13 @@ strong { font-weight: 700; }
 
   function openAppearance() {
     if (appearanceOpen) return;
+    closeStatePicker();
+    closeGamePicker();
+    closeLayoutEditor();
+    closeGlossary();
     appearanceOpen = true;
     $('appearanceModal').classList.remove('hidden');
-    document.body.classList.add('modal-open');
+    syncBodyModalState();
     applyAppearanceSettings();
   }
 
@@ -3288,7 +3349,7 @@ strong { font-weight: 700; }
     if (!appearanceOpen) return;
     appearanceOpen = false;
     $('appearanceModal').classList.add('hidden');
-    document.body.classList.toggle('modal-open', statePickerOpen || gamePickerOpen || layoutEditorOpen || glossaryOpen);
+    syncBodyModalState();
   }
 
   function resetAppearance() {
