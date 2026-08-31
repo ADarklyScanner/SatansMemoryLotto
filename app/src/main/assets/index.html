@@ -1998,6 +1998,33 @@ strong { font-weight: 700; }
     return (arr || []).map((_, n) => gs && gs[n] && !gs[n].never ? gs[n].current : 0);
   }
 
+  function sumBucket(numbers) {
+    return Math.floor(numbers.reduce((a, b) => a + b, 0) / 10) * 10;
+  }
+
+  function sumDistributionModel(rows, stats) {
+    if (stats.digit) return null;
+    const counts = {};
+    rows.forEach((r) => {
+      const numbers = [...new Set((r.numbers || []).map(Number).filter(Number.isInteger))];
+      if (numbers.length) {
+        const bucket = sumBucket(numbers);
+        counts[bucket] = (counts[bucket] || 0) + 1;
+      }
+    });
+    const max = Math.max(1, ...Object.values(counts));
+    const scores = Object.fromEntries(Object.entries(counts).map(([bucket, count]) => [bucket, count / max]));
+    return { scores, buckets: Object.keys(counts).map(Number) };
+  }
+
+  function chooseModelSet(pool, count, weightFn, sumModel) {
+    const candidates = [];
+    for (let i = 0; i < 16; i++) candidates.push(chooseUnique(pool, count, weightFn));
+    if (!sumModel) return candidates[0];
+    const weights = candidates.map((numbers) => .85 + .15 * (sumModel.scores[sumBucket(numbers)] || 0));
+    return weightedChoice(candidates, weights);
+  }
+
   function generateSets(rows, g, stats) {
     if (stats.digit) {
       const sets = [];
@@ -2026,12 +2053,13 @@ strong { font-weight: 700; }
     const freqNorm = normalized(stats.freq, pool);
     const consNorm = normalized(eraConsistency(rows, g, stats), pool);
     const gapNorm = normalized(gapValueArray(stats), pool);
+    const sumModel = sumDistributionModel(rows, stats);
     const formulas = [
       (n) => .02 + Math.pow(freqNorm[n], 1.7),
       (n) => .02 + .72 * freqNorm[n] + .28 * consNorm[n],
       (n) => .02 + .82 * freqNorm[n] + .18 * gapNorm[n]
     ];
-    const sets = formulas.map((fn) => ({ main: chooseUnique(pool, stats.len, fn), bonus: null }));
+    const sets = formulas.map((fn) => ({ main: chooseModelSet(pool, stats.len, fn, sumModel), bonus: null }));
 
     if (stats.bonusFreq && stats.bonusRange) {
       const bp = [];
@@ -2296,31 +2324,34 @@ strong { font-weight: 700; }
     const f = normalized(stats.freq, pool);
     const c = normalized(eraConsistency(fullRows, selectedGame, stats), pool);
     const g = normalized(gapValueArray(stats), pool);
+    const sum = sumDistributionModel(fullRows, stats);
     return [
-      Object.fromEntries(pool.map((n) => [n, Math.pow(f[n], 1.7)])),
-      Object.fromEntries(pool.map((n) => [n, .72 * f[n] + .28 * c[n]])),
-      Object.fromEntries(pool.map((n) => [n, .82 * f[n] + .18 * g[n]]))
+      { numbers: Object.fromEntries(pool.map((n) => [n, Math.pow(f[n], 1.7)])), sum },
+      { numbers: Object.fromEntries(pool.map((n) => [n, .72 * f[n] + .28 * c[n]])), sum },
+      { numbers: Object.fromEntries(pool.map((n) => [n, .82 * f[n] + .18 * g[n]])), sum }
     ];
   }
 
   function scoreText(set, index) {
     const scores = modelScores(analysis.all);
     if (!scores) return 'Position-weighted digit model';
-    const vals = set.main.map((n) => Math.round((scores[index][n] || 0) * 100));
+    const vals = set.main.map((n) => Math.round((scores[index].numbers[n] || 0) * 100));
     const avg = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+    const bucket = sumBucket(set.main);
+    const sumScore = Math.round((scores[index].sum.scores[bucket] || 0) * 100);
     let best = 0;
     for (const r of fullRows) {
       const hs = new Set((r.numbers || []).map(Number));
       best = Math.max(best, set.main.filter((n) => hs.has(n)).length);
     }
-    return 'Relative model score ' + avg + '/100 · number scores ' + vals.join(', ') + ' · best historical overlap ' + best + '/' + set.main.length;
+    return 'Relative model score ' + avg + '/100 · number scores ' + vals.join(', ') + ' · sum distribution ' + sumScore + '/100 for bucket ' + bucket + '–' + (bucket + 9) + ' · best historical overlap ' + best + '/' + set.main.length;
   }
 
   function renderSets() {
     const algos = [
-      ['Set 1 · All-time hot', 'Strongest emphasis on all-time appearance frequency.'],
-      ['Set 2 · Historical consistency', 'All-time frequency plus consistency across four eras of the full archive.'],
-      ['Set 3 · Frequency + overdue', 'All-time frequency remains dominant, with a smaller current-gap component.']
+      ['Set 1 · All-time hot', 'Frequency plus a modest historical sum-distribution fit.'],
+      ['Set 2 · Historical consistency', 'Frequency, four-era consistency, and a modest sum-distribution fit.'],
+      ['Set 3 · Frequency + overdue', 'Frequency, current gap, and a modest sum-distribution fit.']
     ];
     $('sets').innerHTML = analysis.sets.map((s, i) => '<div class="set"><div class="set-head"><div class="set-name">' + algos[i][0] + '</div><div class="algo">' + algos[i][1] + '</div></div><div class="balls">' + s.main.map((n) => '<span class="ball">' + n + '</span>').join('') + (s.bonus != null ? '<span class="ball bonus">' + s.bonus + '</span>' : '') + '</div><div class="mini">' + escapeHtml(setText(s)) + '</div><div class="mini">' + escapeHtml(scoreText(s, i)) + '</div></div>').join('');
   }
