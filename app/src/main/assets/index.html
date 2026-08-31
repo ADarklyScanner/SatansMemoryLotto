@@ -2469,6 +2469,58 @@ strong { font-weight: 700; }
     return items[items.length - 1];
   }
 
+  function stableSetKey(set) {
+    const main = (set.main || []).slice().sort((a, b) => a - b).map(String);
+    const bonus = set.bonus != null ? ['+' + String(set.bonus)] : [];
+    return main.concat(bonus).join('|');
+  }
+
+  function scoreSetCandidate(set, stats) {
+    if (!set || !Array.isArray(set.main)) return -Infinity;
+    if (stats.digit) {
+      const weights = [0.7, 0.3];
+      const score = set.main.reduce((sum, n) => sum + (weights[(n % 2 === 0 ? 0 : 1)] || 0.2), 0);
+      return score;
+    }
+
+    const pool = [];
+    for (let n = stats.range[0]; n <= stats.range[1]; n++) pool.push(n);
+    const freqNorm = normalized(stats.freq, pool);
+    const consNorm = normalized(eraConsistency(fullRows, selectedGame, stats), pool);
+    const gapNorm = normalized(gapValueArray(stats), pool);
+    let total = 0;
+    for (const n of set.main) {
+      total += 0.5 * (freqNorm[n] || 0) + 0.3 * (consNorm[n] || 0) + 0.2 * (gapNorm[n] || 0);
+    }
+
+    if (stats.bonusFreq && stats.bonusRange && set.bonus != null) {
+      const bp = [];
+      for (let n = stats.bonusRange[0]; n <= stats.bonusRange[1]; n++) bp.push(n);
+      const bNorm = normalized(stats.bonusFreq, bp);
+      const bGap = normalized(gapValueArray(stats, true), bp);
+      total += 0.18 * (bNorm[set.bonus] || 0) + 0.08 * (bGap[set.bonus] || 0);
+    }
+    return total;
+  }
+
+  function strictRankSetCandidates(candidates, stats) {
+    const ranked = candidates
+      .map((set) => ({ set, score: scoreSetCandidate(set, stats), key: stableSetKey(set) }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.key.localeCompare(b.key);
+      });
+
+    const seen = new Set();
+    const unique = [];
+    for (const item of ranked) {
+      if (seen.has(item.key)) continue;
+      seen.add(item.key);
+      unique.push(item.set);
+    }
+    return unique;
+  }
+
   function chooseUnique(pool, count, weightFn) {
     let avail = [...pool];
     let out = [];
@@ -2515,25 +2567,25 @@ strong { font-weight: 700; }
 
   function generateSets(rows, g, stats) {
     if (stats.digit) {
-      const sets = [];
       const pool = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
       const allNorm = normalized(stats.freq, pool);
       const consNorm = normalized(eraConsistency(rows, g, stats), pool);
       const gapNorm = normalized(gapValueArray(stats), pool);
-      for (let s = 0; s < 3; s++) {
+      const candidates = [];
+      for (let s = 0; s < 24; s++) {
         const nums = [];
         for (let p = 0; p < stats.len; p++) {
           const pos = stats.pos[p];
           const weights = pool.map((n) => {
-            if (s === 0) return Math.pow(pos[n] + 1, 1.65);
-            if (s === 1) return 1 + 6 * (.65 * allNorm[n] + .35 * consNorm[n]);
+            if (s % 3 === 0) return Math.pow(pos[n] + 1, 1.65);
+            if (s % 3 === 1) return 1 + 6 * (.65 * allNorm[n] + .35 * consNorm[n]);
             return 1 + 6 * (.8 * allNorm[n] + .2 * gapNorm[n]);
           });
           nums.push(weightedChoice(pool, weights));
         }
-        sets.push({ main: nums, bonus: null });
+        candidates.push({ main: nums, bonus: null });
       }
-      return sets;
+      return strictRankSetCandidates(candidates, stats).slice(0, 3);
     }
 
     const pool = [];
@@ -2547,18 +2599,25 @@ strong { font-weight: 700; }
       (n) => .02 + .72 * freqNorm[n] + .28 * consNorm[n],
       (n) => .02 + .82 * freqNorm[n] + .18 * gapNorm[n]
     ];
-    const sets = formulas.map((fn) => ({ main: chooseModelSet(pool, stats.len, fn, sumModel), bonus: null }));
-
-    if (stats.bonusFreq && stats.bonusRange) {
-      const bp = [];
-      for (let n = stats.bonusRange[0]; n <= stats.bonusRange[1]; n++) bp.push(n);
-      const bNorm = normalized(stats.bonusFreq, bp);
-      const bGap = normalized(gapValueArray(stats, true), bp);
-      sets[0].bonus = weightedChoice(bp, bp.map((n) => .02 + Math.pow(bNorm[n], 1.7)));
-      sets[1].bonus = weightedChoice(bp, bp.map((n) => .02 + bNorm[n]));
-      sets[2].bonus = weightedChoice(bp, bp.map((n) => .02 + .82 * bNorm[n] + .18 * bGap[n]));
+    const candidates = [];
+    for (let i = 0; i < 24; i++) {
+      const set = { main: chooseModelSet(pool, stats.len, formulas[i % formulas.length], sumModel), bonus: null };
+      if (stats.bonusFreq && stats.bonusRange) {
+        const bp = [];
+        for (let n = stats.bonusRange[0]; n <= stats.bonusRange[1]; n++) bp.push(n);
+        const bNorm = normalized(stats.bonusFreq, bp);
+        const bGap = normalized(gapValueArray(stats, true), bp);
+        const bonusFormula = i % 3;
+        set.bonus = weightedChoice(bp, bp.map((n) => {
+          if (bonusFormula === 0) return .02 + Math.pow(bNorm[n], 1.7);
+          if (bonusFormula === 1) return .02 + bNorm[n];
+          return .02 + .82 * bNorm[n] + .18 * bGap[n];
+        }));
+      }
+      candidates.push(set);
     }
-    return sets;
+
+    return strictRankSetCandidates(candidates, stats).slice(0, 3);
   }
 
   function analyzeAll(rows, g) {
