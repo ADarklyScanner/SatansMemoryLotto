@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.darkly.lotteryfrequency'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.darkly.satanmemorylotto.test1'
+        minSdk 26
+        targetSdk 35
+        versionCode 4
+        versionName '2.0-test1'
+    }
+}

@@ -1,0 +1,1 @@
+com.darkly.satanmemorylotto.test1:style/AppTheme = 0x7f010000

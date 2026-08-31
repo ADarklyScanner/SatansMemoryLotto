@@ -1,0 +1,7 @@
+com.darkly.lotteryfrequency.app-pngs-0 /workspaces/SatansMemoryLotto/app/build/generated/res/pngs/debug
+com.darkly.lotteryfrequency.app-resValues-1 /workspaces/SatansMemoryLotto/app/build/generated/res/resValues/debug
+com.darkly.lotteryfrequency.app-packageDebugResources-2 /workspaces/SatansMemoryLotto/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.darkly.lotteryfrequency.app-packageDebugResources-3 /workspaces/SatansMemoryLotto/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.darkly.lotteryfrequency.app-debug-4 /workspaces/SatansMemoryLotto/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.darkly.lotteryfrequency.app-debug-5 /workspaces/SatansMemoryLotto/app/src/debug/res
+com.darkly.lotteryfrequency.app-main-6 /workspaces/SatansMemoryLotto/app/src/main/res
