@@ -270,6 +270,7 @@ strong { font-weight: 700; }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -312,6 +313,7 @@ strong { font-weight: 700; }
   text-align: left;
   min-width: 0;
   max-width: 100%;
+  flex: 1 1 210px;
 }
 .selector-trigger .meta {
   display: flex;
@@ -439,6 +441,11 @@ strong { font-weight: 700; }
   color: var(--text);
   padding: 9px 10px;
   text-align: left;
+  cursor: pointer;
+}
+.pick:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.28);
+  outline-offset: 2px;
 }
 .pick.selected {
   background: var(--accent-soft);
@@ -573,6 +580,7 @@ strong { font-weight: 700; }
 .accordion-button .title-wrap {
   min-width: 0;
   flex: 1 1 180px;
+  max-width: 100%;
 }
 .accordion-button .title-wrap h3 {
   margin: 0;
@@ -593,13 +601,14 @@ strong { font-weight: 700; }
   margin-left: auto;
   flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
 }
 .accordion-preview {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px;
-  max-width: 220px;
+  max-width: min(220px, 100%);
   min-width: 0;
 }
 .accordion-preview .preview-pill {
@@ -1088,6 +1097,10 @@ strong { font-weight: 700; }
   .field-row, .freq-grid, .pattern-grid, .stats-grid { grid-template-columns: 1fr; }
   .slider-row { grid-template-columns: 1fr; }
   .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
   .topbar {
     flex-direction: column;
     align-items: stretch;
@@ -1102,6 +1115,10 @@ strong { font-weight: 700; }
   .topbar-actions > * {
     flex: 1 1 calc(50% - 8px);
     min-width: 0;
+  }
+  .selector-trigger {
+    width: 100%;
+    justify-content: flex-start;
   }
   .accordion-button {
     align-items: flex-start;
@@ -1124,7 +1141,7 @@ strong { font-weight: 700; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom));
   z-index: 80;
 }
 .appearance-modal.hidden { display: none; }
@@ -2286,9 +2303,11 @@ strong { font-weight: 700; }
   });
 
   function makePick(item, kind) {
-    const b = document.createElement('button');
-    b.type = 'button';
+    const b = document.createElement('div');
     b.className = 'pick';
+    b.tabIndex = 0;
+    b.setAttribute('role', 'button');
+    b.setAttribute('aria-label', item.name);
 
     const main = document.createElement('div');
     main.className = 'pick-main';
@@ -2317,6 +2336,7 @@ strong { font-weight: 700; }
 
     updateStar();
     star.addEventListener('click', (ev) => {
+      ev.preventDefault();
       ev.stopPropagation();
       if (kind === 'state') {
         toggleFavState(item);
@@ -2326,10 +2346,18 @@ strong { font-weight: 700; }
       renderCurrentList(kind);
     });
 
-    b.append(main, star);
-    b.addEventListener('click', () => {
+    const activate = () => {
       if (kind === 'state') selectState(item);
       else selectGame(item);
+    };
+
+    b.append(main, star);
+    b.addEventListener('click', activate);
+    b.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        activate();
+      }
     });
 
     return b;
