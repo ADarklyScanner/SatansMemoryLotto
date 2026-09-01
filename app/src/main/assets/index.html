@@ -1316,6 +1316,16 @@ strong { font-weight: 700; }
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
 }
+.selector-row .panel { padding: 8px 10px; }
+.selector-row .panel-head { min-height: 48px; align-items: center; }
+.selector-row .step { margin: 0; }
+.live-log { max-height: 150px; overflow: auto; }
+.live-row.summary { display: none; }
+.ticket-record { display: grid; gap: 5px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ticket-record:last-child { border-bottom: 0; }
+.ticket-record .controls { margin-top: 2px; }
+.ticket-record .pill { min-height: 32px; padding: 5px 8px; }
+.pattern-grid .stat { min-height: 0; padding: 8px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1425,6 +1435,19 @@ strong { font-weight: 700; }
             <button id="genView1000" class="pill seg" type="button">LAST 1,000</button>
             <button id="genView100" class="pill seg" type="button">LAST 100</button>
           </div>
+          <div class="controls" style="margin-top: 10px;">
+            <label class="status" for="strictnessControl">STRICTNESS</label>
+            <select id="strictnessControl" class="text-input" aria-label="Recommendation strictness">
+              <option value="0">Low</option>
+              <option value="1">Relaxed</option>
+              <option value="2">Balanced</option>
+              <option value="3">Selective</option>
+              <option value="4">Maximum</option>
+            </select>
+            <span id="strictnessMeta" class="status subtle"></span>
+          </div>
+          <div id="consensusSummary" class="status subtle" style="margin-top: 8px;"></div>
+          <div id="physicalContextSummary" class="status subtle" style="margin-top: 6px;"></div>
           <div id="stats" class="stats-grid"></div>
           <div id="sets" class="sets"></div>
           <div class="controls" style="margin-top: 10px;">
@@ -1720,6 +1743,29 @@ strong { font-weight: 700; }
       </div>
     </section>
 
+    <section id="myTicketsPanel" class="panel hidden" data-panel-key="myTicketsPanel">
+      <div class="accordion-card open" data-preview-type="myTickets">
+        <button class="accordion-button" type="button" aria-expanded="true">
+          <span class="title-wrap"><h3>My tickets</h3><span class="accordion-summary">Played tickets, results, and balances</span></span>
+          <span class="accordion-side"><span class="accordion-preview"></span><span class="accordion-toggle-icon">⌃</span></span>
+        </button>
+        <div class="accordion-body">
+          <div id="ticketTotals" class="stats-grid"></div>
+          <div class="field-row" style="margin-top:8px;">
+            <input id="playedTicketLabel" class="text-input" type="text" placeholder="Optional label" aria-label="Played ticket label">
+            <input id="playedTicketCost" class="text-input" type="number" min="0" step="0.01" placeholder="Ticket cost" aria-label="Ticket cost">
+            <input id="playedTicketDrawDate" class="text-input" type="date" aria-label="Intended draw date">
+          </div>
+          <textarea id="playedTicketNotes" class="text-input" placeholder="Optional notes" aria-label="Played ticket notes" style="margin-top:8px;"></textarea>
+          <div class="controls" style="margin-top:8px;">
+            <button id="createManualPlayedTicket" class="pill seg" type="button">Mark manual entry played</button>
+            <button id="checkPlayedTickets" class="pill seg" type="button">Check available results</button>
+          </div>
+          <div id="playedTickets" class="saved-sets" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </section>
+
     <section id="masterGameDataPanel" class="panel hidden" data-panel-key="masterGameDataPanel">
       <div class="accordion-card open" data-preview-type="masterGameData">
         <button class="accordion-button" type="button" aria-expanded="true">
@@ -1763,6 +1809,7 @@ strong { font-weight: 700; }
                 <input id="manualTicketBonusInput" class="text-input hidden" type="text" placeholder="Bonus" aria-label="Manual ticket bonus input">
               </div>
               <button id="manualTicketCheck" class="action secondary" type="button">Check ticket</button>
+              <button id="manualTicketPlay" class="pill seg" type="button">Save as played</button>
               <div id="manualTicketResult" class="check-output"></div>
             </div>
             <div class="ticket-card">
@@ -1904,6 +1951,8 @@ strong { font-weight: 700; }
   const FAVORITES_KEY = 'lfp_favorites_v2';
   const PREFS_KEY = 'lfp_preferences_v3';
   const SAVED_KEY = 'lfp_saved_sets_v3';
+  const PLAYED_TICKETS_KEY = 'lfp_played_tickets_v1';
+  const TICKET_SCHEMA_VERSION = 1;
   const APPEARANCE_KEY = 'lfp_appearance_v1';
   const CACHE_DB = 'lfp_history_cache_v2';
   const HISTORY_CACHE_VERSION = 2;
@@ -2182,6 +2231,9 @@ strong { font-weight: 700; }
   }
 
   const HISTORICAL_FIT_ENGINE_VERSION = 2;
+  const BATCH1_DERIVED_ANALYSIS_VERSION = 1;
+  const STRICTNESS_KEY = 'lfp_recommendation_strictness_v1';
+  const DERIVED_ANALYSIS_CACHE_KEY = 'lfp_batch1_derived_analysis_v1';
   const HISTORY_WINDOW_DEFS = {
     all: { key: 'all', label: 'All', requested: Infinity },
     1000: { key: '1000', label: 'Last 1,000', requested: 1000 },
@@ -2267,6 +2319,148 @@ strong { font-weight: 700; }
     const cap = Number.isFinite(requested) ? Math.min(normalized.length, requested) : normalized.length;
     const selected = normalized.slice(0, cap);
     return { rows: selected, requested: def.requested, actual: selected.length, label: def.label, key: def.key, mode: windowKey || 'all' };
+  }
+
+  function recommendationStrictness() {
+    const value = Number(localStorage.getItem(STRICTNESS_KEY));
+    return Number.isInteger(value) ? Math.max(0, Math.min(4, value)) : 4;
+  }
+
+  function strictnessPoolSize(candidateCount, level) {
+    const count = Math.max(1, Number(candidateCount) || 1);
+    const bounded = Math.max(0, Math.min(4, Number(level) || 0));
+    return Math.max(1, Math.ceil(count * ([0.1, 0.04, 0.015, 0.005, 0][bounded])));
+  }
+
+  function strictnessSetsForFit(fit, g, level) {
+    if (!fit || !fit.rankedByModel) return (fit && fit.sets) ? fit.sets.slice() : [];
+    return ['set1', 'set2', 'set3'].map((modelKey) => {
+      const ranked = fit.rankedByModel[modelKey] || [];
+      const poolSize = strictnessPoolSize(ranked.length, level);
+      const chosen = ranked[Math.max(0, poolSize - 1)] || ranked[0] || { main: [], FinalModelScore: 0, familyScores: {} };
+      return {
+        main: compactCandidateNumberSet(chosen.main || []).slice(0, fit.env.stats.len || 5),
+        bonus: buildIndependentBonusSelection(modelKey, chosen.main || [], g, fit.env),
+        modelKey,
+        FinalModelScore: chosen.FinalModelScore || 0,
+        familyScores: chosen.familyScores || {},
+        strictnessPoolSize: poolSize
+      };
+    });
+  }
+
+  function historyIdentity(rows) {
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const first = safeRows[0] || {};
+    const last = safeRows[safeRows.length - 1] || {};
+    return [safeRows.length, first.draw_id || first.draw_number || first.draw_date || '', last.draw_id || last.draw_number || last.draw_date || '', (first.numbers || []).join(','), (last.numbers || []).join(',')].join('|');
+  }
+
+  function derivedAnalysisCacheKey(rows, g) {
+    return [selectedState ? stateKey(selectedState) : 'local', g ? gameKey(selectedState || {}, g) : 'game', historyIdentity(rows), HISTORICAL_FIT_ENGINE_VERSION, BATCH1_DERIVED_ANALYSIS_VERSION].join('::');
+  }
+
+  function buildCrossWindowConsensusFromFits(windowFits) {
+    const entries = Object.entries(windowFits || {}).filter(([, fit]) => fit && Array.isArray(fit.sets));
+    const windowCount = Math.max(1, entries.length);
+    const main = new Map();
+    const bonus = new Map();
+    const exactSets = new Map();
+    entries.forEach(([windowKey, fit]) => {
+      fit.sets.forEach((set) => {
+        const normalizedScore = Math.max(0, Math.min(100, Number(set.FinalModelScore) || 0));
+        (set.main || []).forEach((number) => {
+          const entry = main.get(number) || { number, windows: new Map(), scores: [] };
+          entry.windows.set(windowKey, Math.max(entry.windows.get(windowKey) || 0, normalizedScore));
+          entry.scores.push(normalizedScore);
+          main.set(number, entry);
+        });
+        if (set.bonus != null) {
+          const entry = bonus.get(set.bonus) || { number: set.bonus, windows: new Map(), scores: [] };
+          entry.windows.set(windowKey, Math.max(entry.windows.get(windowKey) || 0, normalizedScore));
+          entry.scores.push(normalizedScore);
+          bonus.set(set.bonus, entry);
+        }
+        const key = stableSetKey(set);
+        const exact = exactSets.get(key) || { key, main: set.main, bonus: set.bonus, windows: new Set(), scores: [] };
+        exact.windows.add(windowKey);
+        exact.scores.push(normalizedScore);
+        exactSets.set(key, exact);
+      });
+    });
+    const rank = (entry) => {
+      const coverage = entry.windows.size / windowCount;
+      const averageScore = entry.scores.reduce((sum, score) => sum + score, 0) / Math.max(1, entry.scores.length);
+      return Object.assign(entry, { coverage, averageScore, consensusScore: 100 * coverage * (0.5 + averageScore / 200) });
+    };
+    const sortConsensus = (left, right) => right.consensusScore - left.consensusScore || right.coverage - left.coverage || left.number - right.number;
+    return {
+      windows: entries.map(([key, fit]) => ({ key, actualHistoryCount: fit.env.windowInfo.actual })),
+      mainNumbers: Array.from(main.values()).map(rank).sort(sortConsensus),
+      bonusNumbers: Array.from(bonus.values()).map(rank).sort(sortConsensus),
+      exactSetAgreements: Array.from(exactSets.values()).map(rank).filter((entry) => entry.coverage > 1 / windowCount).sort((left, right) => right.consensusScore - left.consensusScore || left.key.localeCompare(right.key))
+    };
+  }
+
+  function physicalSourceDescriptor(state, game) {
+    const stateId = String(stateKey(state || {})).toLowerCase();
+    const gameId = String(game && (game.id || game.slug || game.name) || '').toLowerCase();
+    if (stateId === 'california' && gameId === 'mega_millions') {
+      return { provider: 'California Lottery', sourceUrl: 'https://www.calottery.com/draw-games/mega-millions', coverage: 'unavailable', checkedAt: '2026-09-01', fields: [] };
+    }
+    return { provider: 'No validated equipment-record provider configured', sourceUrl: null, coverage: 'unavailable', checkedAt: '2026-09-01', fields: [] };
+  }
+
+  function normalizePhysicalContextRecords(records, state, game) {
+    const source = physicalSourceDescriptor(state, game);
+    const normalized = [];
+    const rejects = [];
+    (Array.isArray(records) ? records : []).forEach((record, index) => {
+      if (!record || typeof record !== 'object' || !record.drawDate || !record.sourceUrl) {
+        rejects.push({ index, reason: 'missing_identity_or_source' });
+        return;
+      }
+      const machineId = record.machineId == null ? null : String(record.machineId);
+      const ballSetId = record.ballSetId == null ? null : String(record.ballSetId);
+      if (!machineId && !ballSetId && !record.equipmentEra && !record.venue) {
+        rejects.push({ index, reason: 'missing_documented_physical_context' });
+        return;
+      }
+      normalized.push({ drawDate: String(record.drawDate), drawId: record.drawId == null ? null : String(record.drawId), machineId, ballSetId, equipmentEra: record.equipmentEra == null ? null : String(record.equipmentEra), venue: record.venue == null ? null : String(record.venue), sourceUrl: String(record.sourceUrl), provider: record.provider ? String(record.provider) : source.provider, updatedAt: record.updatedAt ? String(record.updatedAt) : null });
+    });
+    return { source, records: normalized, rejects };
+  }
+
+  function analyzePhysicalContext(rows, state, game) {
+    const rawRecords = (Array.isArray(rows) ? rows : []).flatMap((row) => Array.isArray(row.physical_context) ? row.physical_context : (row.physical_context ? [row.physical_context] : []));
+    const normalized = normalizePhysicalContextRecords(rawRecords, state, game);
+    const contexts = new Map();
+    normalized.records.forEach((record) => {
+      const key = ['machine:' + (record.machineId || ''), 'ballSet:' + (record.ballSetId || ''), 'era:' + (record.equipmentEra || '')].join('|');
+      const entry = contexts.get(key) || { key, count: 0, records: [] };
+      entry.count += 1;
+      entry.records.push(record);
+      contexts.set(key, entry);
+    });
+    const groups = Array.from(contexts.values()).map((entry) => Object.assign(entry, { reliability: entry.count / (entry.count + 30), sufficient: entry.count >= 30 })).sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+    return { source: normalized.source, recordCount: normalized.records.length, rejectedRecordCount: normalized.rejects.length, groups, recommendationInfluence: 0, status: groups.some((group) => group.sufficient) ? 'informational_only' : 'unavailable_or_insufficient' };
+  }
+
+  function buildBatch1DerivedAnalysis(rows, g, primaryFit) {
+    const cacheKey = derivedAnalysisCacheKey(rows, g);
+    const cached = safeJsonParse(localStorage.getItem(DERIVED_ANALYSIS_CACHE_KEY), {});
+    if (cached[cacheKey]) return cached[cacheKey];
+    const fits = {};
+    ['100', '1000', 'all'].forEach((windowKey) => {
+      const canReusePrimaryAllFit = windowKey === 'all' && primaryFit && primaryFit.env && primaryFit.env.windowInfo && primaryFit.env.windowInfo.key === 'all';
+      fits[windowKey] = canReusePrimaryAllFit ? primaryFit : buildHistoricalFitModelSets(historyWindowRows(rows, windowKey).rows, g, windowKey);
+    });
+    const consensus = buildCrossWindowConsensusFromFits(fits);
+    const physical = analyzePhysicalContext(rows, selectedState, g);
+    const value = { version: BATCH1_DERIVED_ANALYSIS_VERSION, cacheKey, historyIdentity: historyIdentity(rows), consensus, physical };
+    cached[cacheKey] = value;
+    localStorage.setItem(DERIVED_ANALYSIS_CACHE_KEY, JSON.stringify(cached));
+    return value;
   }
 
   function getHistoryWindowLabel(windowKey, rowsLength) {
@@ -2965,6 +3159,7 @@ strong { font-weight: 700; }
     return {
       env,
       sets: resultSets,
+      rankedByModel: Object.fromEntries(models.map((modelKey) => [modelKey, perModel[modelKey].ranked])),
       countSummary: {
         initialUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].initialUniqueCandidateCount])),
         mutationCandidatesEvaluatedPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].mutationCandidatesEvaluated])),
@@ -3063,6 +3258,7 @@ strong { font-weight: 700; }
     return {
       env,
       sets: resultSets,
+      rankedByModel: Object.fromEntries(models.map((modelKey) => [modelKey, perModel[modelKey].ranked])),
       countSummary: {
         initialUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].initialUniqueCandidateCount])),
         mutationCandidatesEvaluatedPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].mutationCandidatesEvaluated])),
@@ -3278,11 +3474,14 @@ strong { font-weight: 700; }
     if (analysis && fullRows.length) {
       const selectedRows = historyWindowRows(fullRows, generationWindow).rows;
       const fit = buildHistoricalFitModelSets(selectedRows, selectedGame, generationWindow);
-      analysis.sets = fit.sets;
+      analysis.sets = strictnessSetsForFit(fit, selectedGame, recommendationStrictness());
+      analysis.v2Audit = fit;
+      analysis.batch1 = buildBatch1DerivedAnalysis(fullRows, selectedGame, fit);
       analysis.lastAnalyzedAt = new Date().toISOString();
       analysis.windowRows = selectedRows;
       renderSets();
       renderHistoricalFitMeta();
+      renderBatch1Summaries();
     }
   }
 
@@ -3327,7 +3526,104 @@ strong { font-weight: 700; }
   }
 
   function savedSets() {
-    return storeGet(SAVED_KEY, []);
+    const legacy = storeGet(SAVED_KEY, []);
+    const migrated = (Array.isArray(legacy) ? legacy : []).map((entry, index) => {
+      if (entry && entry.schemaVersion === TICKET_SCHEMA_VERSION && entry.pickId) return entry;
+      return {
+        schemaVersion: TICKET_SCHEMA_VERSION,
+        pickId: 'saved-' + String(entry && entry.at || 'legacy') + '-' + index,
+        createdAt: entry && entry.at || new Date(0).toISOString(),
+        updatedAt: entry && entry.at || new Date(0).toISOString(),
+        label: entry && entry.label || '', notes: entry && entry.notes || '',
+        stateId: entry && entry.stateId || '', gameId: entry && entry.gameId || '',
+        state: entry && entry.state || 'Unknown state', game: entry && entry.game || 'Unknown game',
+        sets: Array.isArray(entry && entry.sets) ? entry.sets.filter((set) => set && typeof set === 'object').map((set) => ({ main: Array.isArray(set.main) ? set.main.slice() : [], bonus: set.bonus == null ? null : set.bonus, modelKey: set.modelKey || null, FinalModelScore: set.FinalModelScore == null ? null : set.FinalModelScore })) : []
+      };
+    });
+    if (JSON.stringify(legacy) !== JSON.stringify(migrated)) storeSet(SAVED_KEY, migrated);
+    return migrated;
+  }
+
+  function playedTickets() {
+    return storeGet(PLAYED_TICKETS_KEY, []).filter((ticket) => ticket && ticket.schemaVersion === TICKET_SCHEMA_VERSION && ticket.ticketId);
+  }
+
+  function storePlayedTickets(tickets) {
+    return storeSet(PLAYED_TICKETS_KEY, Array.isArray(tickets) ? tickets : []);
+  }
+
+  function nextLocalId(prefix) {
+    const sequenceKey = prefix + '_sequence';
+    const next = Number(localStorage.getItem(sequenceKey) || 0) + 1;
+    localStorage.setItem(sequenceKey, String(next));
+    return prefix + '-' + Date.now().toString(36) + '-' + next.toString(36);
+  }
+
+  function ticketResultMatch(ticket, result) {
+    if (!ticket || !result || !Array.isArray(result.numbers)) return null;
+    const intendedDate = ticket.intendedDrawDate || null;
+    const intendedId = ticket.intendedDrawId || null;
+    if (!intendedDate && !intendedId) return null;
+    const resultId = result.draw_id || result.id || result.drawId || null;
+    if ((intendedDate && String(result.draw_date || '') !== String(intendedDate)) || (intendedId && String(resultId || '') !== String(intendedId))) return null;
+    const resultMain = new Set(result.numbers.map(Number));
+    const matchedMain = (ticket.mainNumbers || []).filter((number) => resultMain.has(Number(number))).length;
+    const bonusMatch = ticket.bonusNumber != null && result.bonus_ball != null && Number(ticket.bonusNumber) === Number(result.bonus_ball);
+    return { matchedMain, bonusMatch, resultId: resultId == null ? null : String(resultId), resultDate: result.draw_date || null };
+  }
+
+  function createPlayedTicket(input) {
+    const mainNumbers = compactCandidateNumberSet(input && input.mainNumbers || []);
+    if (!mainNumbers.length) return null;
+    const now = new Date().toISOString();
+    const ticket = {
+      schemaVersion: TICKET_SCHEMA_VERSION,
+      ticketId: nextLocalId('ticket'), stateId: String(input.stateId || (selectedState ? stateKey(selectedState) : '')),
+      gameId: String(input.gameId || (selectedGame ? gameKey(selectedState, selectedGame) : '')),
+      state: input.state || (selectedState ? selectedState.name : ''), game: input.game || (selectedGame ? selectedGame.name : ''),
+      mainNumbers, bonusNumber: input.bonusNumber == null ? null : Number(input.bonusNumber),
+      playedDate: input.playedDate || now.slice(0, 10), intendedDrawDate: input.intendedDrawDate || null, intendedDrawId: input.intendedDrawId || null,
+      cost: Math.max(0, Number(input.cost) || 0), label: String(input.label || ''), notes: String(input.notes || ''), source: input.source || 'manual',
+      modelKey: input.modelKey || null, FinalModelScore: input.FinalModelScore == null ? null : Number(input.FinalModelScore),
+      status: input.intendedDrawDate || input.intendedDrawId ? 'awaiting_draw' : 'draw_unassigned', resultIdentity: null, matchedMain: null, bonusMatch: false,
+      winnings: null, winningsSource: null, checkedAt: null, createdAt: now, updatedAt: now
+    };
+    const tickets = playedTickets();
+    tickets.unshift(ticket);
+    storePlayedTickets(tickets);
+    return ticket;
+  }
+
+  function checkPlayedTicket(ticket, result) {
+    const match = ticketResultMatch(ticket, result);
+    if (!match) return ticket;
+    const identity = String(match.resultId || match.resultDate || '');
+    if (ticket.resultIdentity === identity && ticket.checkedAt) return ticket;
+    const preserveManualWinnings = ticket.winningsSource === 'manual';
+    return Object.assign({}, ticket, { status: match.matchedMain || match.bonusMatch ? 'checked_prize_unavailable' : 'checked_no_match', resultIdentity: identity, matchedMain: match.matchedMain, bonusMatch: match.bonusMatch, winnings: preserveManualWinnings ? ticket.winnings : null, winningsSource: preserveManualWinnings ? 'manual' : null, checkedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  }
+
+  function checkAvailablePlayedTickets(results, stateId = selectedState ? stateKey(selectedState) : '', gameId = selectedGame ? gameKey(selectedState, selectedGame) : '') {
+    const tickets = playedTickets();
+    const checked = tickets.map((ticket) => (ticket.stateId === stateId && ticket.gameId === gameId && Array.isArray(results) ? results.reduce((current, result) => checkPlayedTicket(current, result), ticket) : ticket));
+    storePlayedTickets(checked);
+    return checked;
+  }
+
+  function ticketFinancialTotals(tickets = playedTickets()) {
+    const totals = tickets.reduce((sum, ticket) => {
+      sum.spent += Number(ticket.cost) || 0;
+      sum.won += Number(ticket.winnings) || 0;
+      sum.count += 1;
+      if (ticket.winnings != null && Number(ticket.winnings) > 0) sum.winners += 1;
+      return sum;
+    }, { spent: 0, won: 0, count: 0, winners: 0 });
+    totals.net = totals.won - totals.spent;
+    return totals;
+  }
+
+  function unresolvedTicketGameKeys(tickets = playedTickets()) {
+    return [...new Set(tickets.filter((ticket) => ['awaiting_draw', 'draw_unassigned'].includes(ticket.status)).map((ticket) => ticket.stateId + '::' + ticket.gameId))];
   }
 
   function layoutPrefs() {
@@ -4501,13 +4797,15 @@ strong { font-weight: 700; }
         setV2ProgressAt(state.label, state.percent, state.detail || '');
       }
     });
+    const derived = buildBatch1DerivedAnalysis(rows, g, v2);
     return {
       all,
       last1000: makeStats(rows.slice(0, 1000), g),
       last500: makeStats(rows.slice(0, 500), g),
       last100: makeStats(rows.slice(0, 100), g),
-      sets: v2.sets,
+      sets: strictnessSetsForFit(v2, g, recommendationStrictness()),
       v2Audit: v2,
+      batch1: derived,
       v2ModelCount: v2.sets.length,
       sourceWindow: 'all'
     };
@@ -4521,6 +4819,7 @@ strong { font-weight: 700; }
     if (rows === fullRows && game === selectedGame && analysis) {
       analysis.sets = v2.sets;
       analysis.v2Audit = v2;
+      analysis.batch1 = buildBatch1DerivedAnalysis(rows, game, v2);
       analysis.v2ModelCount = v2.sets.length;
       analysis.sourceWindow = windowKey;
       analysis.windowRows = selectedRows;
@@ -4528,6 +4827,37 @@ strong { font-weight: 700; }
       renderMasterResultsAndChecks();
     }
     return v2;
+  }
+
+  function applyStrictness(level) {
+    if (!analysis || !analysis.v2Audit) return;
+    const strictness = Math.max(0, Math.min(4, Number(level)));
+    localStorage.setItem(STRICTNESS_KEY, String(strictness));
+    analysis.sets = strictnessSetsForFit(analysis.v2Audit, selectedGame, strictness);
+    renderSets();
+    renderBatch1Summaries();
+    renderMasterResultsAndChecks();
+  }
+
+  function renderBatch1Summaries() {
+    const strictness = recommendationStrictness();
+    const control = $('strictnessControl');
+    const strictnessMeta = $('strictnessMeta');
+    if (control) control.value = String(strictness);
+    const pools = analysis && analysis.v2Audit && analysis.v2Audit.rankedByModel ? ['set1', 'set2', 'set3'].map((modelKey) => strictnessPoolSize((analysis.v2Audit.rankedByModel[modelKey] || []).length, strictness)) : [];
+    if (strictnessMeta) strictnessMeta.textContent = pools.length ? 'Eligible ranked pool: ' + pools.join(' / ') : '';
+    const consensusEl = $('consensusSummary');
+    const physicalEl = $('physicalContextSummary');
+    const derived = analysis && analysis.batch1;
+    if (consensusEl) {
+      const consensus = derived && derived.consensus;
+      const top = consensus && consensus.mainNumbers && consensus.mainNumbers[0];
+      consensusEl.textContent = top ? 'Cross-Window Consensus: #' + top.number + ' across ' + Math.round(top.coverage * 3) + '/3 windows; separate from V2 Model Score.' : 'Cross-Window Consensus: unavailable until independent window analyses complete.';
+    }
+    if (physicalEl) {
+      const physical = derived && derived.physical;
+      physicalEl.textContent = physical && physical.recordCount ? 'Physical Context V3: ' + physical.recordCount + ' documented records; informational only.' : 'Physical Context V3: no validated per-draw machine or ball-set records available for this game.';
+    }
   }
 
   function pct(count, draws, digit, len = 1) {
@@ -4799,7 +5129,13 @@ strong { font-weight: 700; }
       ['Set 2 · Historical consistency', 'Frequency, four-era consistency, and a modest sum-distribution fit.'],
       ['Set 3 · Frequency + overdue', 'Frequency, current gap, and a modest sum-distribution fit.']
     ];
-    $('sets').innerHTML = analysis.sets.map((s, i) => '<div class="set"><div class="set-head"><div class="set-name">' + algos[i][0] + '</div><div class="algo">' + algos[i][1] + '</div></div><div class="balls">' + s.main.map((n) => '<span class="ball">' + n + '</span>').join('') + (s.bonus != null ? '<span class="ball bonus">' + s.bonus + '</span>' : '') + '</div><div class="mini">' + escapeHtml(setText(s)) + '</div><div class="mini">' + escapeHtml(scoreText(s, i)) + '</div></div>').join('');
+    $('sets').innerHTML = analysis.sets.map((s, i) => '<div class="set"><div class="set-head"><div class="set-name">' + algos[i][0] + '</div><div class="algo">' + algos[i][1] + '</div></div><div class="balls">' + s.main.map((n) => '<span class="ball">' + n + '</span>').join('') + (s.bonus != null ? '<span class="ball bonus">' + s.bonus + '</span>' : '') + '</div><div class="mini">V2 Model Score: ' + Number(s.FinalModelScore || 0).toFixed(6) + (s.strictnessPoolSize ? ' · strictness pool ' + s.strictnessPoolSize : '') + '</div><div class="mini">' + escapeHtml(setText(s)) + '</div><button class="pill seg" type="button" data-generated-play="' + i + '">Mark as played</button><div class="mini">' + escapeHtml(scoreText(s, i)) + '</div></div>').join('');
+    $('sets').querySelectorAll('[data-generated-play]').forEach((button) => button.addEventListener('click', () => {
+      const set = analysis.sets[Number(button.dataset.generatedPlay)];
+      if (!set) return;
+      createPlayedTicket(Object.assign(ticketInputMetadata('generated'), { mainNumbers: set.main, bonusNumber: set.bonus, modelKey: set.modelKey, FinalModelScore: set.FinalModelScore }));
+      renderPlayedTickets();
+    }));
   }
 
   async function copyText(text) {
@@ -4830,7 +5166,8 @@ strong { font-weight: 700; }
 
   function saveCurrentSets() {
     const arr = savedSets();
-    arr.unshift({ at: new Date().toISOString(), state: selectedState.name, game: selectedGame.name, sets: analysis.sets.map((s) => ({ main: [...s.main], bonus: s.bonus })) });
+    const now = new Date().toISOString();
+    arr.unshift({ schemaVersion: TICKET_SCHEMA_VERSION, pickId: nextLocalId('saved'), createdAt: now, updatedAt: now, label: '', notes: '', stateId: stateKey(selectedState), gameId: gameKey(selectedState, selectedGame), state: selectedState.name, game: selectedGame.name, sets: analysis.sets.map((s) => ({ main: [...s.main], bonus: s.bonus, modelKey: s.modelKey || null, FinalModelScore: s.FinalModelScore == null ? null : s.FinalModelScore })) });
     storeSet(SAVED_KEY, arr.slice(0, 100));
     renderSaved();
     setStatus('actionStatus', 'Saved current three sets.', 'good');
@@ -4847,9 +5184,51 @@ strong { font-weight: 700; }
 
   function renderSaved() {
     const arr = savedSets();
-    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="empty-state">No saved picks yet.</div>';
+    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="ticket-record"><strong>SAVED · ' + escapeHtml(x.label || (x.state + ' · ' + x.game)) + '</strong><small>' + escapeHtml(new Date(x.createdAt).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div>' + (x.notes ? '<small>' + escapeHtml(x.notes) + '</small>' : '') + '<div class="controls"><button class="pill seg" type="button" data-saved-play="' + escapeHtml(x.pickId) + '">Mark played</button><button class="pill seg" type="button" data-saved-edit="' + escapeHtml(x.pickId) + '">Edit</button><button class="pill seg" type="button" data-saved-delete="' + escapeHtml(x.pickId) + '">Delete</button></div></div>').join('') : '<div class="empty-state">No saved picks yet.</div>';
+    $('savedSets').querySelectorAll('[data-saved-play]').forEach((button) => button.addEventListener('click', () => playSavedPick(button.dataset.savedPlay)));
+    $('savedSets').querySelectorAll('[data-saved-edit]').forEach((button) => button.addEventListener('click', () => editSavedPick(button.dataset.savedEdit)));
+    $('savedSets').querySelectorAll('[data-saved-delete]').forEach((button) => button.addEventListener('click', () => deleteSavedPick(button.dataset.savedDelete)));
     updateAccordionPreviews();
     renderMasterResultsAndChecks();
+  }
+
+  function editSavedPick(pickId) {
+    const picks = savedSets();
+    const pick = picks.find((entry) => entry.pickId === pickId);
+    if (!pick) return;
+    pick.label = window.prompt('Saved pick label (optional)', pick.label || '') || '';
+    pick.notes = window.prompt('Saved pick notes (optional)', pick.notes || '') || '';
+    pick.updatedAt = new Date().toISOString();
+    storeSet(SAVED_KEY, picks);
+    renderSaved();
+  }
+
+  function deleteSavedPick(pickId) {
+    storeSet(SAVED_KEY, savedSets().filter((entry) => entry.pickId !== pickId));
+    renderSaved();
+  }
+
+  function ticketInputMetadata(source) {
+    return { stateId: selectedState ? stateKey(selectedState) : '', gameId: selectedGame ? gameKey(selectedState, selectedGame) : '', state: selectedState ? selectedState.name : '', game: selectedGame ? selectedGame.name : '', source, label: $('playedTicketLabel') ? $('playedTicketLabel').value : '', notes: $('playedTicketNotes') ? $('playedTicketNotes').value : '', cost: $('playedTicketCost') ? $('playedTicketCost').value : 0, intendedDrawDate: $('playedTicketDrawDate') && $('playedTicketDrawDate').value ? $('playedTicketDrawDate').value : null };
+  }
+
+  function playSavedPick(pickId) {
+    const pick = savedSets().find((entry) => entry.pickId === pickId);
+    if (!pick || !pick.sets.length) return;
+    const set = pick.sets[0];
+    createPlayedTicket(Object.assign(ticketInputMetadata('saved'), { stateId: pick.stateId, gameId: pick.gameId, state: pick.state, game: pick.game, mainNumbers: set.main, bonusNumber: set.bonus, modelKey: set.modelKey, FinalModelScore: set.FinalModelScore, label: pick.label || ticketInputMetadata('saved').label, notes: pick.notes || ticketInputMetadata('saved').notes }));
+    renderPlayedTickets();
+  }
+
+  function renderPlayedTickets() {
+    const root = $('playedTickets');
+    const totalsRoot = $('ticketTotals');
+    if (!root || !totalsRoot) return;
+    const tickets = playedTickets();
+    const totals = ticketFinancialTotals(tickets);
+    totalsRoot.innerHTML = '<div class="stat"><strong>' + totals.count + '</strong><span>tickets</span></div><div class="stat"><strong>$' + totals.spent.toFixed(2) + '</strong><span>spent</span></div><div class="stat"><strong>$' + totals.won.toFixed(2) + '</strong><span>won</span></div><div class="stat"><strong>$' + totals.net.toFixed(2) + '</strong><span>net</span></div>';
+    root.innerHTML = tickets.length ? tickets.map((ticket) => '<div class="ticket-record"><strong>PLAYED · ' + escapeHtml(ticket.label || ticket.game) + '</strong><small>' + escapeHtml(ticket.state + ' · ' + (ticket.intendedDrawDate || 'draw not assigned') + ' · ' + ticket.status) + '</small><div>' + escapeHtml(ticket.mainNumbers.join(', ')) + (ticket.bonusNumber != null ? ' <b>+ ' + escapeHtml(ticket.bonusNumber) + '</b>' : '') + ' · $' + Number(ticket.cost || 0).toFixed(2) + '</div><small>' + (ticket.checkedAt ? 'Main matches: ' + ticket.matchedMain + (ticket.bonusMatch ? ' + bonus' : '') + (ticket.winnings == null && ticket.status === 'checked_prize_unavailable' ? ' · Prize amount unavailable' : '') : 'Awaiting an assigned official result') + '</small><div class="controls"><button class="pill seg" type="button" data-ticket-delete="' + escapeHtml(ticket.ticketId) + '">Delete</button></div></div>').join('') : '<div class="empty-state">No played tickets yet.</div>';
+    root.querySelectorAll('[data-ticket-delete]').forEach((button) => button.addEventListener('click', () => { storePlayedTickets(playedTickets().filter((ticket) => ticket.ticketId !== button.dataset.ticketDelete)); renderPlayedTickets(); }));
   }
 
   function gameRuleSummary(game) {
@@ -5085,6 +5464,7 @@ strong { font-weight: 700; }
     renderManualTicketCheck();
     renderSavedPickCheck();
     renderMasterAnalytics();
+    renderPlayedTickets();
   }
 
   function renderHistory() {
@@ -5103,6 +5483,7 @@ strong { font-weight: 700; }
     $('customWeightedSetPanel').classList.remove('hidden');
     $('historicalDrawsPanel').classList.remove('hidden');
     $('savedPicksPanel').classList.remove('hidden');
+    $('myTicketsPanel').classList.remove('hidden');
 
     if (analysis && analysis.v2Audit) {
       const summary = analysis.v2Audit.countSummary;
@@ -5562,6 +5943,10 @@ strong { font-weight: 700; }
     $('view1000').addEventListener('click', () => setView('1000'));
     $('view500').addEventListener('click', () => setView('500'));
     $('view100').addEventListener('click', () => setView('100'));
+    $('genViewAll').addEventListener('click', () => safeSetWindow('all'));
+    $('genView1000').addEventListener('click', () => safeSetWindow('1000'));
+    $('genView100').addEventListener('click', () => safeSetWindow('100'));
+    $('strictnessControl').addEventListener('change', () => applyStrictness($('strictnessControl').value));
     $('sortHot').addEventListener('click', () => { freqSort = 'hot'; renderFrequency(); setViewButtons(); });
     $('sortCold').addEventListener('click', () => { freqSort = 'cold'; renderFrequency(); setViewButtons(); });
     $('sortNumber').addEventListener('click', () => { freqSort = 'number'; renderFrequency(); setViewButtons(); });
@@ -5592,6 +5977,16 @@ strong { font-weight: 700; }
       setStatus('actionStatus', 'Regenerated three deterministic V2 model sets from the selected history window.', 'good');
     });
     $('manualTicketCheck').addEventListener('click', renderManualTicketCheck);
+    const createManualPlayedTicket = () => {
+      const main = parseMainTicket($('manualTicketInput').value);
+      const bonusValues = parseTicketInput($('manualTicketBonusInput').value);
+      if (!main.length || !selectedGame) return;
+      createPlayedTicket(Object.assign(ticketInputMetadata('manual'), { mainNumbers: main, bonusNumber: gameHasSeparateBonus(selectedGame) && bonusValues.length ? bonusValues[0] : null }));
+      renderPlayedTickets();
+    };
+    $('manualTicketPlay').addEventListener('click', createManualPlayedTicket);
+    $('createManualPlayedTicket').addEventListener('click', createManualPlayedTicket);
+    $('checkPlayedTickets').addEventListener('click', () => { checkAvailablePlayedTickets(fullRows); renderPlayedTickets(); });
     $('manualTicketInput').addEventListener('input', renderManualTicketCheck);
     const bonusInput = $('manualTicketBonusInput');
     if (bonusInput) {
@@ -5628,6 +6023,7 @@ strong { font-weight: 700; }
         setV2ProgressAt('Preparing historical statistics…', 5, 'Preparing selected-window historical environment');
         analysis = await analyzeAll(fullRows, selectedGame);
         renderResults(fi);
+        renderBatch1Summaries();
         renderLatestDrawPreview();
         $('progressText').textContent = fi.cached ? 'Cached full-history analysis complete.' : 'FULL HISTORY LOADED · ' + fullRows.length + ' drawings analyzed · ' + fi.pages + ' batches';
         $('generatedSetsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -5701,6 +6097,21 @@ strong { font-weight: 700; }
     validateCacheIsolation,
     applySampleShrinkage,
     regenerateV2Sets,
+    strictnessPoolSize,
+    strictnessSetsForFit,
+    buildCrossWindowConsensusFromFits,
+    normalizePhysicalContextRecords,
+    analyzePhysicalContext,
+    buildBatch1DerivedAnalysis,
+    savedSets,
+    createPlayedTicket,
+    playedTickets,
+    storePlayedTickets,
+    ticketResultMatch,
+    checkPlayedTicket,
+    checkAvailablePlayedTickets,
+    ticketFinancialTotals,
+    unresolvedTicketGameKeys,
     MODEL_FAMILY_WEIGHTS,
     BONUS_MODEL_WEIGHTS,
     SIGNAL_FAMILY_DEFS,
