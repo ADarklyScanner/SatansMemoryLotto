@@ -248,6 +248,18 @@ strong { font-weight: 700; }
   min-width: 0;
   max-width: 100%;
 }
+.pill {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.topbar-actions .pill {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+}
 
 .main-sections {
   display: flex;
@@ -264,14 +276,16 @@ strong { font-weight: 700; }
 .selector-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 .selector-row .panel {
   margin: 0;
   min-width: 0;
+  padding: 10px 10px 8px;
 }
 .selector-row .panel-head {
   margin-bottom: 0;
+  gap: 8px;
 }
 .selector-row .selector-trigger {
   width: 100%;
@@ -286,12 +300,12 @@ strong { font-weight: 700; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .step {
-  font-size: 0.71rem;
+  font-size: 0.64rem;
   line-height: 1.2;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -330,6 +344,8 @@ strong { font-weight: 700; }
   min-width: 0;
   max-width: 100%;
   flex: 1 1 210px;
+  min-height: 46px;
+  padding: 8px 10px;
 }
 .selector-trigger .meta {
   display: flex;
@@ -339,13 +355,13 @@ strong { font-weight: 700; }
   min-width: 0;
 }
 .selector-trigger .meta span {
-  font-size: 0.69rem;
+  font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
 }
 .selector-trigger strong {
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -1099,9 +1115,81 @@ strong { font-weight: 700; }
 }
 .empty-state {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   text-align: center;
-  padding: 10px 8px;
+  padding: 8px 6px;
+  line-height: 1.4;
+}
+.latest-draw-preview {
+  margin-top: 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+.latest-draw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+.latest-draw-header strong {
+  color: var(--text);
+}
+.latest-draw-numbers {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.latest-draw-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+.latest-draw-number.match {
+  background: rgba(255, 215, 0, 0.18);
+  border-color: rgba(255, 215, 0, 0.45);
+  color: var(--warning);
+}
+.latest-draw-divider {
+  color: var(--muted);
+  font-weight: 800;
+}
+.check-output,
+.ticket-card,
+.analytic-card,
+.master-card {
+  display: grid;
+  gap: 8px;
+}
+.ticket-card,
+.analytic-card,
+.master-card {
+  padding: 10px;
+}
+.check-output .mini, .mini {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 @media (min-width: 640px) {
@@ -1306,6 +1394,7 @@ strong { font-weight: 700; }
         </div>
         <div class="live-log" id="liveTop" aria-live="polite" aria-label="Progressive loading history log"></div>
       </div>
+      <div id="latestDrawPreview" class="latest-draw-preview hidden" aria-live="polite"></div>
       <p class="status" style="margin-top: 10px;">Results download in batches of up to 100 draws and continue until the archive is exhausted. Final picks are generated only after the full history finishes.</p>
     </section>
 
@@ -1653,7 +1742,10 @@ strong { font-weight: 700; }
           <div class="ticket-grid">
             <div class="ticket-card">
               <h4>Manual ticket check</h4>
-              <input id="manualTicketInput" class="text-input" type="text" placeholder="Example: 7, 18, 22, 31, 39 + 12" aria-label="Manual ticket input">
+              <div class="field-row">
+                <input id="manualTicketInput" class="text-input" type="text" placeholder="Example: 7, 18, 22, 31, 39" aria-label="Manual ticket input">
+                <input id="manualTicketBonusInput" class="text-input hidden" type="text" placeholder="Bonus" aria-label="Manual ticket bonus input">
+              </div>
               <button id="manualTicketCheck" class="action secondary" type="button">Check ticket</button>
               <div id="manualTicketResult" class="check-output"></div>
             </div>
@@ -1959,11 +2051,11 @@ strong { font-weight: 700; }
     order: [
       'statePanel',
       'gamePanel',
-      'resultsCheckingPanel',
-      'savedPicksPanel',
-      'generatedSetsPanel',
-      'masterGameDataPanel',
       'analyzePanel',
+      'generatedSetsPanel',
+      'savedPicksPanel',
+      'resultsCheckingPanel',
+      'masterGameDataPanel',
       'historicalDrawsPanel',
       'frequencyExplorerPanel',
       'hotNumbersPanel',
@@ -3375,7 +3467,7 @@ strong { font-weight: 700; }
 
   function renderSaved() {
     const arr = savedSets();
-    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="status">No saved picks yet.</div>';
+    $('savedSets').innerHTML = arr.length ? arr.slice(0, 30).map((x) => '<div class="history-row"><strong>' + escapeHtml(x.state) + ' · ' + escapeHtml(x.game) + '</strong><small>' + escapeHtml(new Date(x.at).toLocaleString()) + '</small><div>' + x.sets.map((s, j) => (j + 1) + ': ' + escapeHtml(setText(s))).join('<br>') + '</div></div>').join('') : '<div class="empty-state">No saved picks yet.</div>';
     updateAccordionPreviews();
     renderMasterResultsAndChecks();
   }
@@ -3440,31 +3532,74 @@ strong { font-weight: 700; }
     }).join('');
   }
 
+  function gameHasSeparateBonus(game) {
+    const g = game || {};
+    const bonusBalls = Number(g.bonusBalls || 0);
+    const bonusRange = Array.isArray(g.bonusRange) ? g.bonusRange : [];
+    return bonusBalls > 0 || (bonusRange.length === 2 && Number.isFinite(bonusRange[0]) && Number.isFinite(bonusRange[1]));
+  }
+
   function parseTicketInput(value) {
     const digits = String(value || '').split(/[^0-9]+/).map(Number).filter(Number.isFinite);
     return [...new Set(digits.filter((n) => Number.isInteger(n) && n >= 0))];
   }
 
+  function parseMainTicket(value) {
+    const text = String(value || '');
+    const textBeforeBonus = text.split('+')[0] || '';
+    return parseTicketInput(textBeforeBonus);
+  }
+
+  function parseBonusTicket(value, fallbackText) {
+    const text = String(value || '');
+    if (text.trim()) return parseTicketInput(text);
+    const match = String(fallbackText || '').split('+').slice(-1)[0].match(/\d+/);
+    return match ? [Number(match[0])] : [];
+  }
+
+  function syncManualTicketBonusField() {
+    const bonusInput = $('manualTicketBonusInput');
+    if (!bonusInput) return;
+    const hasSeparateBonus = gameHasSeparateBonus(selectedGame);
+    bonusInput.classList.toggle('hidden', !hasSeparateBonus);
+    if (!hasSeparateBonus) {
+      bonusInput.value = '';
+    }
+  }
+
   function renderManualTicketCheck() {
     const el = $('manualTicketResult');
     const input = $('manualTicketInput');
+    const bonusInput = $('manualTicketBonusInput');
     if (!el || !input) return;
-    const ticket = parseTicketInput(input.value);
-    if (!ticket.length) {
-      el.innerHTML = '<div class="mini">Enter a ticket or number list to compare against the latest available draw.</div>';
+
+    syncManualTicketBonusField();
+
+    const hasSeparateBonus = gameHasSeparateBonus(selectedGame);
+    const ticket = parseMainTicket(input.value);
+    const bonusTicket = hasSeparateBonus && bonusInput ? parseTicketInput(bonusInput.value) : parseBonusTicket(bonusInput && bonusInput.value, input.value);
+    const bonusNumber = bonusTicket.length ? Number(bonusTicket[0]) : null;
+    const resolvedBonus = bonusNumber != null ? bonusNumber : null;
+
+    if (!ticket.length && (!hasSeparateBonus || resolvedBonus == null)) {
+      el.innerHTML = '<div class="mini">Enter a ticket or number list to compare against the latest draw.</div>';
       return;
     }
     if (!fullRows.length) {
-      el.innerHTML = '<div class="mini">Analyze a game first so the latest draw can be used as the comparison reference.</div>';
+      el.innerHTML = '<div class="mini">Analyze a game first so the latest draw can be used as the reference.</div>';
       return;
     }
+
     const latest = fullRows[0] || {};
     const latestNumbers = Array.isArray(latest.numbers) ? latest.numbers.map(Number).filter(Number.isFinite) : [];
     const bonusValue = latest.bonus_ball != null ? Number(latest.bonus_ball) : null;
     const matches = ticket.filter((n) => latestNumbers.includes(n)).length;
-    const bonusMatch = bonusValue != null && ticket.includes(bonusValue);
+    const bonusMatch = bonusValue != null && resolvedBonus != null && Number(resolvedBonus) === Number(bonusValue);
     const winnerText = matches === latestNumbers.length && (!bonusValue || bonusMatch) ? 'Perfect ticket match against the latest draw.' : (matches > 0 ? 'Matches ' + matches + ' main numbers' + (bonusMatch ? ' and the bonus number.' : '.') : 'No main numbers matched the latest draw.');
-    el.innerHTML = '<div class="mini"><strong>Latest draw:</strong> ' + escapeHtml(latestNumbers.join(', ')) + (bonusValue != null ? ' + ' + escapeHtml(String(bonusValue)) : '') + '</div><div class="mini">' + escapeHtml(winnerText) + '</div>';
+
+    const ticketMarkup = ticket.length ? ticket.map((n) => '<span class="latest-draw-number' + (latestNumbers.includes(n) ? ' match' : '') + '">' + escapeHtml(String(n)) + '</span>').join('') : '<span class="mini">No main numbers entered</span>';
+    const bonusMarkup = (hasSeparateBonus || resolvedBonus != null) ? '<span class="latest-draw-divider">+</span><span class="latest-draw-number' + (bonusMatch ? ' match' : '') + '">' + escapeHtml(String(resolvedBonus ?? '')) + '</span>' : '';
+    el.innerHTML = '<div class="mini"><strong>Latest draw:</strong> ' + escapeHtml(latestNumbers.join(', ')) + (bonusValue != null ? ' + ' + escapeHtml(String(bonusValue)) : '') + '</div><div class="latest-draw-numbers">' + ticketMarkup + bonusMarkup + '</div><div class="mini">' + escapeHtml(winnerText) + '</div>';
   }
 
   function renderSavedPickCheck() {
@@ -3534,6 +3669,37 @@ strong { font-weight: 700; }
     comboEl.innerHTML = (pairSummary.slice(0, 5).length ? pairSummary.slice(0, 5) : [['No pair data', 0]]).map(([combo, count]) => '<div class="mini"><strong>' + escapeHtml(String(combo)) + ':</strong> ' + escapeHtml(String(count)) + ' draws</div>').join('');
   }
 
+  function renderLatestDrawPreview() {
+    const el = $('latestDrawPreview');
+    if (!el) return;
+    if (!analysis || !fullRows.length) {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      return;
+    }
+
+    const latest = fullRows[0] || {};
+    const latestNumbers = Array.isArray(latest.numbers) ? latest.numbers.map(Number).filter(Number.isFinite) : [];
+    const bonusValue = latest.bonus_ball != null ? Number(latest.bonus_ball) : null;
+    const setMatches = new Set();
+    if (Array.isArray(analysis.sets)) {
+      analysis.sets.forEach((set) => {
+        if (Array.isArray(set.main)) {
+          set.main.forEach((n) => setMatches.add(Number(n)));
+        }
+        if (set.bonus != null) setMatches.add(Number(set.bonus));
+      });
+    }
+    const drawNumbers = latestNumbers.map((n) => {
+      const isMatch = setMatches.has(n);
+      return '<span class="latest-draw-number' + (isMatch ? ' match' : '') + '">' + escapeHtml(String(n)) + '</span>';
+    }).join('');
+    const bonusMarkup = bonusValue != null ? '<span class="latest-draw-divider">+</span><span class="latest-draw-number' + (setMatches.has(bonusValue) ? ' match' : '') + '">' + escapeHtml(String(bonusValue)) + '</span>' : '';
+
+    el.innerHTML = '<div class="latest-draw-header"><strong>Latest draw</strong><span>' + escapeHtml(String(latest.draw_date || 'Most recent draw')) + '</span></div><div class="latest-draw-numbers">' + drawNumbers + bonusMarkup + '</div>';
+    el.classList.remove('hidden');
+  }
+
   function renderMasterResultsAndChecks() {
     renderGameMasterData();
     renderManualTicketCheck();
@@ -3578,6 +3744,7 @@ strong { font-weight: 700; }
     historyLimit = 50;
     renderHistory();
     renderSaved();
+    renderLatestDrawPreview();
     generateCustom();
   }
 
@@ -3731,10 +3898,10 @@ strong { font-weight: 700; }
     const defaultOpen = new Set([
       'statePanel',
       'gamePanel',
-      'resultsCheckingPanel',
-      'savedPicksPanel',
+      'analyzePanel',
       'generatedSetsPanel',
-      'analyzePanel'
+      'savedPicksPanel',
+      'resultsCheckingPanel'
     ]);
     const nextPrefs = {};
     document.querySelectorAll('.accordion-card').forEach((card) => {
@@ -3823,10 +3990,10 @@ strong { font-weight: 700; }
     const expandedByDefault = new Set([
       'statePanel',
       'gamePanel',
-      'resultsCheckingPanel',
-      'savedPicksPanel',
+      'analyzePanel',
       'generatedSetsPanel',
-      'analyzePanel'
+      'savedPicksPanel',
+      'resultsCheckingPanel'
     ]);
     document.querySelectorAll('.accordion-card').forEach((card, index) => {
       const key = card.dataset.accordionKey || card.dataset.panelKey || card.closest('[data-panel-key]')?.dataset.panelKey || 'section-' + index;
@@ -4042,6 +4209,10 @@ strong { font-weight: 700; }
     });
     $('manualTicketCheck').addEventListener('click', renderManualTicketCheck);
     $('manualTicketInput').addEventListener('input', renderManualTicketCheck);
+    const bonusInput = $('manualTicketBonusInput');
+    if (bonusInput) {
+      bonusInput.addEventListener('input', renderManualTicketCheck);
+    }
     $('savedPickCheck').addEventListener('click', renderSavedPickCheck);
     $('generateWheel').addEventListener('click', renderMasterAnalytics);
     $('wheelCount').addEventListener('input', renderMasterAnalytics);
@@ -4070,6 +4241,7 @@ strong { font-weight: 700; }
         $('progressText').textContent = 'Loaded ' + fullRows.length + ' unique draws. Building all-history models…';
         analysis = analyzeAll(fullRows, selectedGame);
         renderResults(fi);
+        renderLatestDrawPreview();
         $('progressText').textContent = fi.cached ? 'Cached full-history analysis complete.' : 'FULL HISTORY LOADED · ' + fullRows.length + ' drawings analyzed · ' + fi.pages + ' batches';
         $('generatedSetsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) {
