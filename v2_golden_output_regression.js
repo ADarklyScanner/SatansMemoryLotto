@@ -1,0 +1,10 @@
+const { loadProductionRuntime, buildFixtureRows, FIXTURE_GAME, serializableSets } = require('./v2_test_runtime');
+const expected = [{"modelKey":"set1","main":[2,3,4,36,55],"bonus":1,"FinalModelScore":66.35943157019669,"familyScores":{"frequency":90.15873015873017,"recentTrend":7.599999999999999,"eraConsistency":38.13333333333333,"gapOverdue":46.37013824884792,"pairAssociation":90.40643661414579,"tripleAssociation":75,"consecutiveStructure":75,"oddEven":90,"highLow":78,"sumDistribution":50,"repeatPrevious":62.5,"spread":100,"spacingClustering":51,"historicalOverlap":62.5}},{"modelKey":"set2","main":[2,3,4,39,55],"bonus":1,"FinalModelScore":58.630530054263616,"familyScores":{"frequency":90.15873015873017,"recentTrend":7.599999999999999,"eraConsistency":38.13333333333333,"gapOverdue":46.42857142857143,"pairAssociation":89.00938626272283,"tripleAssociation":75,"consecutiveStructure":75,"oddEven":90,"highLow":78,"sumDistribution":50,"repeatPrevious":62.5,"spread":100,"spacingClustering":51,"historicalOverlap":62.5}},{"modelKey":"set3","main":[2,3,11,38,55],"bonus":1,"FinalModelScore":60.24960414470561,"familyScores":{"frequency":90.15873015873017,"recentTrend":7.599999999999999,"eraConsistency":38.13333333333333,"gapOverdue":46.42857142857143,"pairAssociation":87.66668052527278,"tripleAssociation":75,"consecutiveStructure":75,"oddEven":90,"highLow":78,"sumDistribution":50,"repeatPrevious":62.5,"spread":100,"spacingClustering":51,"historicalOverlap":62.5}}];
+const { audit } = loadProductionRuntime();
+const actual = serializableSets(audit.buildHistoricalFitModelSets(buildFixtureRows(), FIXTURE_GAME, 'all'));
+const encoded = JSON.stringify(actual);
+if (encoded !== JSON.stringify(expected)) {
+  throw new Error('GOLDEN V2 OUTPUT REGRESSION\nexpected: ' + JSON.stringify(expected) + '\nactual: ' + encoded);
+} else {
+  console.log('V2 GOLDEN OUTPUT: 3 / 3 PASS');
+}

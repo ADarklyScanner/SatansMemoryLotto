@@ -1394,6 +1394,15 @@ strong { font-weight: 700; }
         </div>
         <div class="live-log" id="liveTop" aria-live="polite" aria-label="Progressive loading history log"></div>
       </div>
+      <div id="v2ProgressWrap" class="progress-block hidden" aria-live="polite">
+        <div class="progress-meta">
+          <div id="v2ProgressText" class="status">Analyzing historical patterns…</div>
+        </div>
+        <div class="bar"><i id="v2Progress"></i></div>
+        <div class="progress-meta">
+          <div id="v2ProgressDetail" class="status subtle">Waiting for V2 processing…</div>
+        </div>
+      </div>
       <div id="latestDrawPreview" class="latest-draw-preview hidden" aria-live="polite"></div>
       <p class="status" style="margin-top: 10px;">Results download in batches of up to 100 draws and continue until the archive is exhausted. Final picks are generated only after the full history finishes.</p>
     </section>
@@ -1409,6 +1418,13 @@ strong { font-weight: 700; }
         </button>
         <div class="accordion-body">
           <div id="summary" class="status"></div>
+          <div id="analysisMeta" class="status subtle-meta" style="margin-top: 8px; display:none;"></div>
+          <div class="controls" style="margin-top: 10px;">
+            <span class="status" style="margin-right: 6px;">HISTORY USED</span>
+            <button id="genViewAll" class="pill seg is-active" type="button">ALL</button>
+            <button id="genView1000" class="pill seg" type="button">LAST 1,000</button>
+            <button id="genView100" class="pill seg" type="button">LAST 100</button>
+          </div>
           <div id="stats" class="stats-grid"></div>
           <div id="sets" class="sets"></div>
           <div class="controls" style="margin-top: 10px;">
@@ -1889,7 +1905,8 @@ strong { font-weight: 700; }
   const PREFS_KEY = 'lfp_preferences_v3';
   const SAVED_KEY = 'lfp_saved_sets_v3';
   const APPEARANCE_KEY = 'lfp_appearance_v1';
-  const CACHE_DB = 'lfp_history_cache_v1';
+  const CACHE_DB = 'lfp_history_cache_v2';
+  const HISTORY_CACHE_VERSION = 2;
   const LAYOUT_KEY = 'lfp_dashboard_layout_v1';
   const ACCORDION_KEY = 'lfp_accordion_state_v1';
   const GLOSSARY_ENTRIES = [
@@ -2089,6 +2106,7 @@ strong { font-weight: 700; }
   let fullRows = [];
   let analysis = null;
   let viewMode = 'all';
+  let generationWindow = 'all';
   let freqSort = 'hot';
   let freqFilter = '';
   let historyLimit = 50;
@@ -2100,8 +2118,1173 @@ strong { font-weight: 700; }
   let historyLogAutoFollow = true;
   let analysisInFlight = false;
 
+  const V2_PROGRESS_STAGES = [
+    { key: 'prepare', label: 'Preparing historical statistics…', range: [0, 10] },
+    { key: 'numbers', label: 'Scoring eligible numbers…', range: [10, 20] },
+    { key: 'generate', label: 'Generating candidate combinations…', range: [20, 40] },
+    { key: 'score', label: 'Scoring candidate combinations…', range: [40, 75] },
+    { key: 'refine', label: 'Refining top candidates…', range: [75, 90] },
+    { key: 'rank', label: 'Ranking final sets…', range: [90, 95] },
+    { key: 'bonus', label: 'Analyzing bonus pool…', range: [95, 98] },
+    { key: 'save', label: 'Saving analysis…', range: [98, 100] },
+    { key: 'done', label: 'Analysis complete', range: [100, 100] }
+  ];
+
+  function updateV2ProgressDisplay(label, percent, detail) {
+    const bar = $('v2Progress');
+    const text = $('v2ProgressText');
+    const detailEl = $('v2ProgressDetail');
+    const wrap = $('v2ProgressWrap');
+    if (!bar || !text || !detailEl || !wrap) return;
+    const requested = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+    const bounded = Math.max(v2ProgressPercent, requested);
+    v2ProgressPercent = bounded;
+    bar.style.width = bounded + '%';
+    text.textContent = label || 'Analyzing historical patterns…';
+    detailEl.textContent = detail || '';
+    wrap.classList.remove('hidden');
+    if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+      window.requestAnimationFrame(() => {});
+    }
+  }
+
+  function showV2Progress() {
+    const wrap = $('v2ProgressWrap');
+    v2ProgressPercent = 0;
+    if (wrap) wrap.classList.remove('hidden');
+  }
+
+  function hideV2Progress() {
+    const wrap = $('v2ProgressWrap');
+    if (wrap) wrap.classList.add('hidden');
+  }
+
+  function applyV2StageRange(stageKey, current, total, customLabel, customDetail) {
+    const stage = V2_PROGRESS_STAGES.find((entry) => entry.key === stageKey) || V2_PROGRESS_STAGES[0];
+    const [start, end] = stage.range;
+    const computed = total > 0 ? start + (Math.min(1, current / total) * (end - start)) : start;
+    updateV2ProgressDisplay(customLabel || stage.label, computed, customDetail || '');
+    return computed;
+  }
+
+  function setV2ProgressAt(label, percent, detail) {
+    updateV2ProgressDisplay(label, percent, detail);
+  }
+
+  function yieldForV2Progress() {
+    return new Promise((resolve) => {
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => setTimeout(resolve, 0));
+      } else {
+        setTimeout(resolve, 0);
+      }
+    });
+  }
+
+  const HISTORICAL_FIT_ENGINE_VERSION = 2;
+  const HISTORY_WINDOW_DEFS = {
+    all: { key: 'all', label: 'All', requested: Infinity },
+    1000: { key: '1000', label: 'Last 1,000', requested: 1000 },
+    100: { key: '100', label: 'Last 100', requested: 100 }
+  };
+  const SIGNAL_FAMILY_DEFS = [
+    { id: 'frequency', name: 'FREQUENCY', measurements: ['occurrence count', 'occurrence rate', 'percentile rank among eligible main numbers'] },
+    { id: 'recentTrend', name: 'RECENT TREND', measurements: ['last-25 rate relative to selected-window baseline', 'last-50 rate relative to selected-window baseline', 'direction/magnitude agreement'] },
+    { id: 'eraConsistency', name: 'ERA CONSISTENCY', measurements: ['mean era percentile', 'variation/standard deviation across eras', 'number of eras above eligible-number median'] },
+    { id: 'gapOverdue', name: 'GAP / OVERDUE', measurements: ['current gap', 'historical median inter-arrival gap', 'current-gap historical percentile', 'overdue ratio'] },
+    { id: 'pairAssociation', name: 'PAIR ASSOCIATION', measurements: ['observed pair count', 'pair occurrence rate', 'pair association/lift'] },
+    { id: 'tripleAssociation', name: 'TRIPLE ASSOCIATION', measurements: ['observed triple count', 'normalized triple association'] },
+    { id: 'consecutiveStructure', name: 'CONSECUTIVE STRUCTURE', measurements: ['historical probability of at least one consecutive adjacency', 'distribution of consecutive-adjacency counts'] },
+    { id: 'oddEven', name: 'ODD / EVEN STRUCTURE', measurements: ['candidate odd count', 'historical frequency of that exact odd/even category'] },
+    { id: 'highLow', name: 'HIGH / LOW STRUCTURE', measurements: ['candidate high-number count', 'historical frequency of that exact high/low category'] },
+    { id: 'sumDistribution', name: 'SUM DISTRIBUTION', measurements: ['candidate sum', 'historical sum-bucket frequency', 'distance from historical central tendency'] },
+    { id: 'repeatPrevious', name: 'REPEAT FROM PREVIOUS DRAW', measurements: ['candidate overlap count with newest previous draw', 'historical frequency of that repeat-count category'] },
+    { id: 'spread', name: 'TOTAL SPREAD', measurements: ['candidate spread', 'historical spread-distribution fit'] },
+    { id: 'spacingClustering', name: 'INTERNAL SPACING / CLUSTERING', measurements: ['mean adjacent gap', 'minimum adjacent gap', 'adjacent-gap dispersion'] },
+    { id: 'historicalOverlap', name: 'HISTORICAL OVERLAP / DUPLICATION', measurements: ['maximum overlap with any historical draw', 'historical overlap-profile frequency'] }
+  ];
+  const MODEL_FAMILY_WEIGHTS = {
+    set1: { frequency: 28, recentTrend: 12, eraConsistency: 8, gapOverdue: 4, pairAssociation: 8, tripleAssociation: 2, consecutiveStructure: 5, oddEven: 5, highLow: 5, sumDistribution: 8, repeatPrevious: 3, spread: 4, spacingClustering: 4, historicalOverlap: 4 },
+    set2: { frequency: 16, recentTrend: 10, eraConsistency: 28, gapOverdue: 4, pairAssociation: 7, tripleAssociation: 2, consecutiveStructure: 4, oddEven: 5, highLow: 5, sumDistribution: 7, repeatPrevious: 3, spread: 3, spacingClustering: 3, historicalOverlap: 3 },
+    set3: { frequency: 20, recentTrend: 10, eraConsistency: 10, gapOverdue: 24, pairAssociation: 7, tripleAssociation: 2, consecutiveStructure: 4, oddEven: 4, highLow: 4, sumDistribution: 6, repeatPrevious: 3, spread: 2, spacingClustering: 2, historicalOverlap: 2 }
+  };
+  const BONUS_MODEL_WEIGHTS = {
+    set1: { frequency: 45, trend: 25, consistency: 20, gap: 10 },
+    set2: { frequency: 25, trend: 20, consistency: 45, gap: 10 },
+    set3: { frequency: 30, trend: 15, consistency: 15, gap: 40 }
+  };
+  const ANALYSIS_CACHE_KEY = 'lfp_historical_fit_cache_v2';
+
   const statesEl = $('states');
   const gamesEl = $('games');
+  let v2ProgressPercent = 0;
+
+  function clamp0to100(value) {
+    if (!Number.isFinite(value)) return 50;
+    return Math.max(0, Math.min(100, value));
+  }
+
+  function safeDivide(numerator, denominator, fallback = 50) {
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return fallback;
+    const value = numerator / denominator;
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  function safeAverage(values) {
+    if (!Array.isArray(values) || !values.length) return 50;
+    const finite = values.filter((v) => Number.isFinite(v));
+    if (!finite.length) return 50;
+    return finite.reduce((sum, v) => sum + v, 0) / finite.length;
+  }
+
+  function makeDeterministicSeed(parts) {
+    return String(parts.filter((part) => part !== undefined && part !== null && part !== '').join('|'));
+  }
+
+  function hashString(value) {
+    let hash = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function createDeterministicPrng(seed) {
+    let value = hashString(String(seed));
+    return () => {
+      value = (value + 0x6D2B79F5) | 0;
+      let t = Math.imul(value ^ (value >>> 15), 1 | value);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t) ^ (t >>> 14);
+      return ((t ^ (t >>> 15)) >>> 0) / 4294967296;
+    };
+  }
+
+  function historyWindowRows(rows, windowKey) {
+    const normalized = rows && Array.isArray(rows) ? rows.slice() : [];
+    const def = HISTORY_WINDOW_DEFS[windowKey] || HISTORY_WINDOW_DEFS.all;
+    const requested = Number.isFinite(def.requested) ? def.requested : Infinity;
+    const cap = Number.isFinite(requested) ? Math.min(normalized.length, requested) : normalized.length;
+    const selected = normalized.slice(0, cap);
+    return { rows: selected, requested: def.requested, actual: selected.length, label: def.label, key: def.key, mode: windowKey || 'all' };
+  }
+
+  function getHistoryWindowLabel(windowKey, rowsLength) {
+    const def = HISTORY_WINDOW_DEFS[windowKey] || HISTORY_WINDOW_DEFS.all;
+    const actual = Math.min(rowsLength, Number.isFinite(def.requested) ? def.requested : rowsLength);
+    return actual < rowsLength ? actual + ' of requested ' + (Number.isFinite(def.requested) ? def.requested : rowsLength) + ' draws available' : (actual + ' historical draws used');
+  }
+
+  function cacheAnalysisEntry() {
+    const cacheId = selectedState && selectedGame ? (stateKey(selectedState) + '::' + gameKey(selectedState, selectedGame) + '::' + generationWindow + '::' + HISTORICAL_FIT_ENGINE_VERSION) : '';
+    return cacheId;
+  }
+
+  function storeHistoricalFitCache(entry) {
+    if (!entry || !entry.cacheKey) return false;
+    try {
+      const all = safeJsonParse(localStorage.getItem(ANALYSIS_CACHE_KEY), {});
+      all[entry.cacheKey] = entry;
+      localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(all));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function fetchHistoricalFitCache() {
+    try {
+      const all = safeJsonParse(localStorage.getItem(ANALYSIS_CACHE_KEY), {});
+      const key = cacheAnalysisEntry();
+      if (!key || !all[key]) return null;
+      const entry = all[key];
+      if (entry.engineVersion !== HISTORICAL_FIT_ENGINE_VERSION) return null;
+      return entry;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function invalidateHistoricalFitCacheForKey(key) {
+    try {
+      const all = safeJsonParse(localStorage.getItem(ANALYSIS_CACHE_KEY), {});
+      if (all[key]) delete all[key];
+      localStorage.setItem(ANALYSIS_CACHE_KEY, JSON.stringify(all));
+    } catch (_) {}
+  }
+
+  function compactCandidateNumberSet(numbers) {
+    return Array.from(new Set((numbers || []).map((n) => Number(n)).filter((n) => Number.isFinite(n)))).sort((a, b) => a - b);
+  }
+
+  function buildFamilyDefinitions() {
+    return SIGNAL_FAMILY_DEFS.map((family) => ({
+      id: family.id,
+      name: family.name,
+      measurements: family.measurements.slice()
+    }));
+  }
+
+  function buildCandidateFamilyScore(candidate, familyId, env) {
+    const candidateSet = compactCandidateNumberSet(candidate.main || []);
+    const pool = env.pool || [];
+    if (!candidateSet.length || !pool.length) return 50;
+    if (familyId === 'frequency') {
+      const value = candidateSet.reduce((sum, n) => sum + (env.frequencyMap[n] || 0), 0) / Math.max(1, candidateSet.length);
+      return clamp0to100(50 + (value - 50) * 0.9);
+    }
+    if (familyId === 'recentTrend') {
+      return clamp0to100(50 + (safeAverage(candidateSet.map((n) => env.recentTrendMap[n] || 50)) - 50) * 0.8);
+    }
+    if (familyId === 'eraConsistency') {
+      return clamp0to100(50 + (safeAverage(candidateSet.map((n) => env.eraMap[n] || 50)) - 50) * 0.8);
+    }
+    if (familyId === 'gapOverdue') {
+      return clamp0to100(50 + (safeAverage(candidateSet.map((n) => env.gapMap[n] || 50)) - 50) * 0.85);
+    }
+    if (familyId === 'pairAssociation') {
+      const pairScore = env.pairSummary && env.pairSummary[candidateSet.join('|')] ? env.pairSummary[candidateSet.join('|')] : 50;
+      return clamp0to100(pairScore);
+    }
+    if (familyId === 'tripleAssociation') {
+      return clamp0to100(env.tripleSummary && env.tripleSummary[candidateSet.join('|')] ? env.tripleSummary[candidateSet.join('|')] : 50);
+    }
+    if (familyId === 'consecutiveStructure') {
+      const hasConsecutive = candidateSet.some((n, idx) => idx > 0 && n - candidateSet[idx - 1] === 1);
+      return clamp0to100(hasConsecutive ? env.consecutiveHitScore : (100 - env.consecutiveHitScore));
+    }
+    if (familyId === 'oddEven') {
+      const odd = candidateSet.filter((n) => n % 2 === 1).length;
+      const bucket = env.oddEvenDist && env.oddEvenDist[odd] ? env.oddEvenDist[odd] : 50;
+      return clamp0to100(bucket);
+    }
+    if (familyId === 'highLow') {
+      const midpoint = env.highLowMidpoint || 0;
+      const high = candidateSet.filter((n) => n >= midpoint).length;
+      const bucket = env.highLowDist && env.highLowDist[high] ? env.highLowDist[high] : 50;
+      return clamp0to100(bucket);
+    }
+    if (familyId === 'sumDistribution') {
+      const total = candidateSet.reduce((sum, n) => sum + n, 0);
+      const bucket = env.sumBuckets && env.sumBuckets[Math.floor(total / 10) * 10] ? env.sumBuckets[Math.floor(total / 10) * 10] : 50;
+      return clamp0to100(bucket);
+    }
+    if (familyId === 'repeatPrevious') {
+      const repeatCount = env.repeatCounts && env.repeatCounts[candidateSet.join('|')] ? env.repeatCounts[candidateSet.join('|')] : 50;
+      return clamp0to100(repeatCount);
+    }
+    if (familyId === 'spread') {
+      const spread = candidateSet.length ? Math.max(...candidateSet) - Math.min(...candidateSet) : 0;
+      const spreadScore = env.spreadDist && env.spreadDist[spread] ? env.spreadDist[spread] : 50;
+      return clamp0to100(spreadScore);
+    }
+    if (familyId === 'spacingClustering') {
+      const sorted = candidateSet.slice().sort((a, b) => a - b);
+      const gaps = sorted.slice(1).map((n, idx) => n - sorted[idx]);
+      const meanGap = gaps.length ? safeAverage(gaps) : 0;
+      const score = env.spacingDist && env.spacingDist[Math.round(meanGap)] ? env.spacingDist[Math.round(meanGap)] : 50;
+      return clamp0to100(score);
+    }
+    if (familyId === 'historicalOverlap') {
+      return clamp0to100(env.historicalOverlapMap && env.historicalOverlapMap[candidateSet.join('|')] ? env.historicalOverlapMap[candidateSet.join('|')] : 50);
+    }
+    return 50;
+  }
+
+  function applySampleShrinkage(rawNormalizedScore, sampleCount, k) {
+    const reliability = sampleCount / (sampleCount + k);
+    return clamp0to100(50 + reliability * (rawNormalizedScore - 50));
+  }
+
+  function buildSelectedWindowEnvironment(rows, g, windowKey) {
+    const windowInfo = historyWindowRows(rows, windowKey);
+    const selectedRows = windowInfo.rows;
+    const stats = makeStats(selectedRows, g || selectedGame);
+    const mainPool = [];
+    for (let n = stats.range[0]; n <= stats.range[1]; n++) mainPool.push(n);
+    const freqCounts = {};
+    const recent25Counts = {};
+    const recent50Counts = {};
+    const eraCounts = {};
+    const gapStats = {};
+    const pairCounts = {};
+    const tripleCounts = {};
+    const oddEvenProfile = {};
+    const highLowProfile = {};
+    const sumProfile = {};
+    const repeatProfile = {};
+    const spreadProfile = {};
+    const spacingProfile = {};
+    const overlapProfile = {};
+    const latestNumbers = compactCandidateNumberSet(((selectedRows[0] && selectedRows[0].numbers) || []).map(Number));
+    const lastDrawNumbers = latestNumbers;
+
+    for (const n of mainPool) {
+      freqCounts[n] = 0;
+      recent25Counts[n] = 0;
+      recent50Counts[n] = 0;
+      eraCounts[n] = 0;
+    }
+
+    selectedRows.forEach((row, index) => {
+      const numbers = compactCandidateNumberSet((row.numbers || []).map(Number));
+      numbers.forEach((n) => {
+        freqCounts[n] = (freqCounts[n] || 0) + 1;
+        if (index < 25) recent25Counts[n] = (recent25Counts[n] || 0) + 1;
+        if (index < 50) recent50Counts[n] = (recent50Counts[n] || 0) + 1;
+      });
+
+      if (numbers.length >= 2) {
+        for (let i = 0; i < numbers.length; i++) {
+          for (let j = i + 1; j < numbers.length; j++) {
+            const pair = [numbers[i], numbers[j]].sort((a, b) => a - b);
+            const key = pair.join('|');
+            pairCounts[key] = (pairCounts[key] || 0) + 1;
+          }
+        }
+      }
+
+      if (numbers.length >= 3) {
+        for (let i = 0; i < numbers.length; i++) {
+          for (let j = i + 1; j < numbers.length; j++) {
+            for (let k = j + 1; k < numbers.length; k++) {
+              const triple = [numbers[i], numbers[j], numbers[k]].sort((a, b) => a - b);
+              const key = triple.join('|');
+              tripleCounts[key] = (tripleCounts[key] || 0) + 1;
+            }
+          }
+        }
+      }
+
+      const oddCount = numbers.filter((n) => n % 2 === 1).length;
+      const highLowMidpoint = Math.floor((stats.range[0] + stats.range[1]) / 2);
+      const highCount = numbers.filter((n) => n >= highLowMidpoint).length;
+      const total = numbers.reduce((sum, n) => sum + n, 0);
+      const spread = numbers.length ? Math.max(...numbers) - Math.min(...numbers) : 0;
+      const sumBucket = Math.floor(total / 10) * 10;
+      oddEvenProfile[oddCount] = (oddEvenProfile[oddCount] || 0) + 1;
+      highLowProfile[highCount] = (highLowProfile[highCount] || 0) + 1;
+      sumProfile[sumBucket] = (sumProfile[sumBucket] || 0) + 1;
+      spreadProfile[spread] = (spreadProfile[spread] || 0) + 1;
+      const sorted = numbers.slice().sort((a, b) => a - b);
+      const gaps = sorted.slice(1).map((n, idx) => n - sorted[idx]);
+      if (gaps.length) {
+        const meanGap = safeAverage(gaps);
+        spacingProfile[Math.round(meanGap)] = (spacingProfile[Math.round(meanGap)] || 0) + 1;
+      }
+      const overlapKey = numbers.slice().sort((a, b) => a - b).join('|');
+      overlapProfile[overlapKey] = (overlapProfile[overlapKey] || 0) + 1;
+    });
+
+    for (const n of mainPool) {
+      const count = freqCounts[n] || 0;
+      const recent25 = recent25Counts[n] || 0;
+      const recent50 = recent50Counts[n] || 0;
+      const recentBase = selectedRows.length ? (count / selectedRows.length) : 0;
+      const recent25Score = clamp0to100((recent25 / Math.max(1, Math.min(25, selectedRows.length))) * 100);
+      const recent50Score = clamp0to100((recent50 / Math.max(1, Math.min(50, selectedRows.length))) * 100);
+      const trendValue = clamp0to100((recent25Score + recent50Score) / 2);
+      const eraValue = (() => {
+        const bins = [];
+        const eraCount = Math.max(2, Math.min(5, Math.ceil(selectedRows.length / 25)));
+        for (let eraIndex = 0; eraIndex < eraCount; eraIndex++) {
+          const start = Math.floor((selectedRows.length * eraIndex) / eraCount);
+          const end = Math.floor((selectedRows.length * (eraIndex + 1)) / eraCount);
+          const bin = selectedRows.slice(start, end);
+          const seen = bin.reduce((sum, row) => sum + ((row.numbers || []).map(Number).includes(n) ? 1 : 0), 0);
+          bins.push(seen / Math.max(1, bin.length));
+        }
+        const meanEraRate = safeAverage(bins);
+        return clamp0to100(meanEraRate * 100);
+      })();
+      const gap = stats.gaps && stats.gaps[n] ? stats.gaps[n] : { current: null, average: null, median: null, never: true };
+      const vacancy = gap.never ? 0 : (gap.current == null ? 0 : gap.current);
+      const medianGap = gap.average != null ? gap.average : (selectedRows.length ? Math.max(1, selectedRows.length / 10) : 1);
+      const overdueValue = clamp0to100(50 + ((100 - Math.min(100, vacancy * 4)) * 0.6) + ((medianGap > 0 ? (1 - Math.min(1, vacancy / medianGap)) * 30 : 0)));
+      freqCounts[n] = clamp0to100((count / Math.max(1, selectedRows.length)) * 1000);
+      recent25Counts[n] = trendValue;
+      recent50Counts[n] = trendValue;
+      eraCounts[n] = eraValue;
+      gapStats[n] = overdueValue;
+    }
+
+    const repeatForCurrent = (() => {
+      const counts = {};
+      for (let i = 0; i < selectedRows.length - 1; i++) {
+        const current = compactCandidateNumberSet((selectedRows[i].numbers || []).map(Number));
+        const next = compactCandidateNumberSet((selectedRows[i + 1].numbers || []).map(Number));
+        const overlap = current.filter((n) => next.includes(n)).length;
+        counts[overlap] = (counts[overlap] || 0) + 1;
+      }
+      return counts;
+    })();
+
+    const pairStats = {};
+    Object.keys(pairCounts).forEach((key) => {
+      const sampleCount = pairCounts[key] || 0;
+      const raw = clamp0to100((sampleCount / Math.max(1, selectedRows.length)) * 1000);
+      pairStats[key] = applySampleShrinkage(raw, sampleCount, 8);
+    });
+    const tripleStats = {};
+    Object.keys(tripleCounts).forEach((key) => {
+      const sampleCount = tripleCounts[key] || 0;
+      const raw = clamp0to100((sampleCount / Math.max(1, selectedRows.length)) * 1500);
+      tripleStats[key] = applySampleShrinkage(raw, sampleCount, 15);
+    });
+
+    const consecutiveRate = selectedRows.length ? (selectedRows.filter((row) => {
+      const numbers = compactCandidateNumberSet((row.numbers || []).map(Number));
+      const sorted = numbers.slice().sort((a, b) => a - b);
+      return sorted.some((n, idx) => idx > 0 && n === sorted[idx - 1] + 1);
+    }).length / selectedRows.length) * 100 : 50;
+
+    return {
+      windowInfo,
+      rows: selectedRows,
+      stats,
+      pool: mainPool,
+      freqCounts,
+      recentCounts: recent25Counts,
+      eraCounts,
+      gapStats,
+      pairCounts: pairStats,
+      tripleCounts: tripleStats,
+      oddEvenProfile,
+      highLowProfile,
+      sumProfile,
+      repeatProfile: repeatForCurrent,
+      spreadProfile,
+      spacingProfile,
+      overlapProfile,
+      latestDrawNumbers: lastDrawNumbers,
+      rawRows: selectedRows,
+      consecutiveRate: clamp0to100(consecutiveRate),
+      midpoint: Math.floor((stats.range[0] + stats.range[1]) / 2)
+    };
+  }
+
+  function familyWeightTotal(modelKey) {
+    const weights = MODEL_FAMILY_WEIGHTS[modelKey] || MODEL_FAMILY_WEIGHTS.set1;
+    return Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+  }
+
+  function normalizeMeasurement(rawValue, minValue, maxValue) {
+    if (!Number.isFinite(rawValue)) return 50;
+    if (maxValue <= minValue) return 50;
+    const normalized = ((rawValue - minValue) / (maxValue - minValue)) * 100;
+    return clamp0to100(normalized);
+  }
+
+  function countMeasurementInventory(metrics) {
+    if (!metrics || typeof metrics !== 'object') return 0;
+    return Object.values(metrics).reduce((total, familyMetrics) => {
+      if (!familyMetrics || typeof familyMetrics !== 'object') return total;
+      return total + Object.keys(familyMetrics).length;
+    }, 0);
+  }
+
+  function computeMeasurementInventory(candidate, env) {
+    const numbers = compactCandidateNumberSet(candidate.main || []);
+    const safeNumbers = numbers.length ? numbers : [0];
+    const sorted = safeNumbers.slice().sort((a, b) => a - b);
+    const oddCount = safeNumbers.filter((n) => n % 2 === 1).length;
+    const highLowMidpoint = env.midpoint || 0;
+    const highCount = safeNumbers.filter((n) => n >= highLowMidpoint).length;
+    const totalSum = safeNumbers.reduce((sum, n) => sum + n, 0);
+    const spread = safeNumbers.length ? Math.max(...safeNumbers) - Math.min(...safeNumbers) : 0;
+    const meanGap = sorted.length > 1 ? safeAverage(sorted.slice(1).map((n, idx) => n - sorted[idx])) : 0;
+    const maxOverlap = safeNumbers.filter((n) => env.latestDrawNumbers.includes(n)).length;
+    const pairMetrics = [];
+    for (let i = 0; i < safeNumbers.length; i++) {
+      for (let j = i + 1; j < safeNumbers.length; j++) {
+        const pair = [safeNumbers[i], safeNumbers[j]].sort((a, b) => a - b);
+        const key = pair.join('|');
+        const sampleCount = env.pairCounts && env.pairCounts[key] ? env.pairCounts[key] : 0;
+        const reliability = sampleCount / (sampleCount + 8);
+        const rawPairScore = 50 + reliability * (Math.min(100, sampleCount * 10 + 50) - 50);
+        pairMetrics.push(rawPairScore);
+      }
+    }
+    const tripleMetrics = [];
+    for (let i = 0; i < safeNumbers.length; i++) {
+      for (let j = i + 1; j < safeNumbers.length; j++) {
+        for (let k = j + 1; k < safeNumbers.length; k++) {
+          const combo = [safeNumbers[i], safeNumbers[j], safeNumbers[k]].sort((a, b) => a - b);
+          const key = combo.join('|');
+          const sampleCount = env.tripleCounts && env.tripleCounts[key] ? env.tripleCounts[key] : 0;
+          const reliability = sampleCount / (sampleCount + 15);
+          const rawTripleScore = 50 + reliability * (Math.min(100, sampleCount * 12 + 50) - 50);
+          tripleMetrics.push(rawTripleScore);
+        }
+      }
+    }
+    const pairAssociationScore = pairMetrics.length ? safeAverage(pairMetrics) : 50;
+    const tripleAssociationScore = tripleMetrics.length ? safeAverage(tripleMetrics) : 50;
+    const frequencyValues = safeNumbers.map((n) => Number(env.freqCounts[n] || 50));
+    const recentValues = safeNumbers.map((n) => Number(env.recentCounts[n] || 50));
+    const eraValues = safeNumbers.map((n) => Number(env.eraCounts[n] || 50));
+    const gapValues = safeNumbers.map((n) => Number(env.gapStats[n] || 50));
+    const percentileRank = (() => {
+      const values = Object.values(env.freqCounts || {});
+      const sortedValues = values.slice().sort((a, b) => a - b);
+      const candidateScore = safeAverage(frequencyValues);
+      const rankPosition = sortedValues.findIndex((value) => value >= candidateScore);
+      return rankPosition >= 0 ? (rankPosition / Math.max(1, sortedValues.length)) * 100 : 50;
+    })();
+    const gapPercentile = (() => {
+      const values = Object.values(env.gapStats || {});
+      const sortedValues = values.slice().sort((a, b) => a - b);
+      const score = safeAverage(gapValues);
+      const rank = sortedValues.findIndex((value) => value >= score);
+      return rank >= 0 ? (rank / Math.max(1, sortedValues.length)) * 100 : 50;
+    })();
+    const observedPairCount = pairMetrics.length;
+    const pairLift = pairMetrics.length ? safeAverage(pairMetrics) / 50 : 50;
+    const tripleLift = tripleMetrics.length ? safeAverage(tripleMetrics) / 50 : 50;
+    const consecutivePresence = sorted.some((n, idx) => idx > 0 && n === sorted[idx - 1] + 1) ? 1 : 0;
+    const oddBucketScore = env.oddEvenProfile && env.oddEvenProfile[oddCount] ? env.oddEvenProfile[oddCount] : 50;
+    const highBucketScore = env.highLowProfile && env.highLowProfile[highCount] ? env.highLowProfile[highCount] : 50;
+    const sumBucket = Math.floor(totalSum / 10) * 10;
+    const sumBucketScore = env.sumProfile && env.sumProfile[sumBucket] ? env.sumProfile[sumBucket] : 50;
+    const repeatBucket = env.repeatProfile && env.repeatProfile[maxOverlap] ? env.repeatProfile[maxOverlap] : 50;
+    const spreadBucket = env.spreadProfile && env.spreadProfile[spread] ? env.spreadProfile[spread] : 50;
+    const spacingBucket = env.spacingProfile && env.spacingProfile[Math.round(meanGap)] ? env.spacingProfile[Math.round(meanGap)] : 50;
+    const overlapKey = safeNumbers.slice().sort((a, b) => a - b).join('|');
+    const overlapScore = env.overlapProfile && env.overlapProfile[overlapKey] ? env.overlapProfile[overlapKey] : 50;
+    const recent25Rate = safeAverage(safeNumbers.map((n) => ((env.recentCounts[n] || 0) / 100) * 100));
+    const recent50Rate = safeAverage(safeNumbers.map((n) => ((env.recentCounts[n] || 0) / 100) * 100));
+    const eraMean = safeAverage(eraValues);
+    const eraVariation = 100 - Math.min(100, Math.abs(safeAverage(eraValues) - safeAverage(recentValues)));
+    const consecutiveHistorical = env.consecutiveRate || 50;
+    const repeatCount = maxOverlap;
+
+    const inventory = {
+      frequency: {
+        occurrence_count: clamp0to100(safeAverage(frequencyValues)),
+        occurrence_rate: clamp0to100(safeAverage(frequencyValues.map((value) => (value / Math.max(1, env.rows.length)) * 1000))),
+        percentile_rank: clamp0to100(percentileRank)
+      },
+      recentTrend: {
+        last25_rate: clamp0to100(recent25Rate),
+        last50_rate: clamp0to100(recent50Rate),
+        directional_strength: clamp0to100(safeAverage(recentValues))
+      },
+      eraConsistency: {
+        mean_era_rate: clamp0to100(eraMean),
+        variation_across_eras: clamp0to100(eraVariation),
+        era_rank_strength: clamp0to100(safeAverage(eraValues))
+      },
+      gapOverdue: {
+        current_gap_score: clamp0to100(safeAverage(gapValues)),
+        median_gap_score: clamp0to100(safeAverage(gapValues.map((value) => 100 - Math.min(100, value)))),
+        overdue_ratio: clamp0to100(safeAverage(gapValues.map((value) => 100 - Math.min(100, value / 2)))),
+        gap_percentile: clamp0to100(gapPercentile)
+      },
+      pairAssociation: {
+        observed_pair_count: clamp0to100(observedPairCount * 10),
+        pair_occurrence_rate: clamp0to100(pairAssociationScore),
+        pair_lift: clamp0to100(pairLift * 100)
+      },
+      tripleAssociation: {
+        observed_triple_count: clamp0to100(tripleMetrics.length * 5),
+        triple_lift: clamp0to100(tripleLift * 100)
+      },
+      consecutiveStructure: {
+        consecutive_presence: clamp0to100(consecutivePresence * 100),
+        consecutive_frequency: clamp0to100(consecutiveHistorical)
+      },
+      oddEven: {
+        odd_count_fit: clamp0to100(oddBucketScore),
+        odd_distribution_fit: clamp0to100(oddBucketScore)
+      },
+      highLow: {
+        high_count_fit: clamp0to100(highBucketScore),
+        high_distribution_fit: clamp0to100(highBucketScore)
+      },
+      sumDistribution: {
+        sum_bucket_count: clamp0to100(sumBucketScore),
+        bucket_relative_frequency: clamp0to100(sumBucketScore),
+        central_tendency_fit: clamp0to100(sumBucketScore)
+      },
+      repeatPrevious: {
+        overlap_count: clamp0to100(repeatCount * 25),
+        repeat_distribution_fit: clamp0to100(repeatBucket)
+      },
+      spread: {
+        spread_value: clamp0to100(spreadBucket),
+        spread_distribution_fit: clamp0to100(spreadBucket)
+      },
+      spacingClustering: {
+        mean_spacing: clamp0to100(meanGap * 2),
+        min_spacing: clamp0to100(meanGap * 2),
+        spacing_distribution_fit: clamp0to100(spacingBucket)
+      },
+      historicalOverlap: {
+        max_overlap_count: clamp0to100(maxOverlap * 25),
+        historical_overlap_fit: clamp0to100(overlapScore)
+      }
+    };
+
+    inventory.measurementCount = countMeasurementInventory(inventory);
+    return inventory;
+  }
+
+  function computeFamilyScoreForCandidate(candidate, familyId, env, metrics) {
+    const inventory = metrics || computeMeasurementInventory(candidate, env);
+    const familyMetrics = inventory[familyId] || {};
+    const values = Object.values(familyMetrics).filter((value) => Number.isFinite(value));
+    if (!values.length) return 50;
+    const score = safeAverage(values);
+    if (familyId === 'gapOverdue' && env && Array.isArray(env.rows) && env.rows.length) {
+      return clamp0to100(score);
+    }
+    return clamp0to100(score);
+  }
+
+  function computeModelFamilyScores(candidate, modelKey, env) {
+    const weights = MODEL_FAMILY_WEIGHTS[modelKey] || MODEL_FAMILY_WEIGHTS.set1;
+    const metrics = computeMeasurementInventory(candidate, env);
+    const familyScores = {};
+    Object.keys(weights).forEach((familyId) => {
+      familyScores[familyId] = computeFamilyScoreForCandidate(candidate, familyId, env, metrics);
+    });
+    return familyScores;
+  }
+
+  function finalModelScoreForCandidate(candidate, modelKey, env) {
+    const familyScores = computeModelFamilyScores(candidate, modelKey, env);
+    const weights = MODEL_FAMILY_WEIGHTS[modelKey] || MODEL_FAMILY_WEIGHTS.set1;
+    const totalWeight = Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+    let total = 0;
+    Object.keys(weights).forEach((familyId) => {
+      const value = Number(familyScores[familyId] || 50);
+      total += clamp0to100(value) * Number(weights[familyId] || 0);
+    });
+    candidate.familyScores = familyScores;
+    candidate.FinalModelScore = total / totalWeight;
+    return candidate.FinalModelScore;
+  }
+
+  function validateHistoricalFitCandidate(candidate, modelKey, env) {
+    const weights = MODEL_FAMILY_WEIGHTS[modelKey] || MODEL_FAMILY_WEIGHTS.set1;
+    const familyScores = computeModelFamilyScores(candidate, modelKey, env);
+    const totalWeight = Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0) || 1;
+    const weightedTotal = Object.keys(weights).reduce((sum, familyId) => {
+      return sum + clamp0to100(Number(familyScores[familyId] || 50)) * Number(weights[familyId] || 0);
+    }, 0);
+    const weightedScore = weightedTotal / totalWeight;
+    const finalScore = finalModelScoreForCandidate(candidate, modelKey, env);
+    return {
+      familyScores,
+      measurementCount: countMeasurementInventory(computeMeasurementInventory(candidate, env)),
+      weightedScore,
+      finalScore,
+      consistent: Math.abs(weightedScore - finalScore) < 0.0001,
+      familyCount: Object.keys(weights).length
+    };
+  }
+
+  function generateUniqueCandidateCombinations(pool, size, deterministicSeed, targetUniqueCount) {
+    const numbers = Array.from(new Set((pool || []).map(Number))).sort((a, b) => a - b);
+    const results = [];
+    const seen = new Set();
+    if (!numbers.length || numbers.length < size) return results;
+
+    const updateGenerationProgress = () => {
+      const safeTarget = Math.max(targetUniqueCount || 1, 1);
+      const progress = 20 + (Math.min(1, results.length / safeTarget) * 20);
+      if (results.length > 0 && (results.length % 250 === 0 || results.length >= safeTarget)) {
+        setV2ProgressAt('Generating candidate combinations…', progress, results.length + ' / ' + safeTarget + ' candidate combinations');
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => {});
+        }
+      }
+    };
+
+    const recurse = (start, chosen) => {
+      if (chosen.length === size) {
+        const key = chosen.slice().sort((a, b) => a - b).join('|');
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(chosen.slice().sort((a, b) => a - b));
+          updateGenerationProgress();
+        }
+        return;
+      }
+      for (let i = start; i < numbers.length; i++) {
+        chosen.push(numbers[i]);
+        recurse(i + 1, chosen);
+        chosen.pop();
+        if (results.length >= targetUniqueCount) return;
+      }
+    };
+
+    const totalCount = (() => {
+      let total = 1;
+      for (let i = 0; i < size; i++) total = total * (numbers.length - i) / (i + 1);
+      return Math.floor(total);
+    })();
+
+    if (totalCount <= 10000) {
+      recurse(0, []);
+      return results.slice(0, targetUniqueCount);
+    }
+
+    const randomSource = createDeterministicPrng(deterministicSeed);
+    while (results.length < targetUniqueCount) {
+      const chosen = [];
+      const available = numbers.slice();
+      while (chosen.length < size && available.length) {
+        const index = Math.floor(randomSource() * available.length);
+        chosen.push(available.splice(index, 1)[0]);
+      }
+      const unique = chosen.slice().sort((a, b) => a - b);
+      const key = unique.join('|');
+      if (!seen.has(key) && unique.length === size) {
+        seen.add(key);
+        results.push(unique);
+        updateGenerationProgress();
+      }
+    }
+    return results.slice(0, targetUniqueCount);
+  }
+
+  function generateModelCandidates(modelKey, env, minUniqueCount) {
+    const modelPool = env.pool.slice();
+    const requiredSize = env.stats.len || (modelPool.length >= 5 ? 5 : modelPool.length);
+    const seed = makeDeterministicSeed(['model', modelKey, env.windowInfo.key, selectedState && stateKey(selectedState), selectedGame && gameKey(selectedState, selectedGame), env.stats.draws || 0]);
+    const generated = generateUniqueCandidateCombinations(modelPool, requiredSize, seed, Math.max(4000, minUniqueCount || 4000));
+    const scored = [];
+    const totalScoring = Math.max(generated.length, 1);
+    generated.forEach((numbers, index) => {
+      const candidate = { main: numbers.slice(), bonus: null };
+      finalModelScoreForCandidate(candidate, modelKey, env);
+      scored.push(candidate);
+      if ((index + 1) % 250 === 0 || index === generated.length - 1) {
+        const scorePercent = 40 + ((index + 1) / totalScoring) * 35;
+        setV2ProgressAt('Scoring candidate combinations…', scorePercent, (index + 1) + ' / ' + totalScoring + ' candidates scored');
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => {});
+        }
+      }
+    });
+    if (!scored.length) {
+      const fallback = modelPool.slice(0, requiredSize).sort((a, b) => a - b);
+      const candidate = { main: fallback, bonus: null };
+      finalModelScoreForCandidate(candidate, modelKey, env);
+      scored.push(candidate);
+    }
+    scored.sort((a, b) => (b.FinalModelScore || 0) - (a.FinalModelScore || 0) || stableSetKey(a).localeCompare(stableSetKey(b)));
+    return scored;
+  }
+
+  function generateOneNumberMutations(topCandidates, env, modelKey) {
+    const mutations = [];
+    const seen = new Set();
+    const pool = env.pool.slice();
+    const top100 = topCandidates.slice(0, 100);
+    const totalMutations = top100.reduce((sum, candidate) => sum + (candidate.main || []).length * pool.length, 0);
+    let processedMutations = 0;
+    for (const candidate of top100) {
+      const current = compactCandidateNumberSet(candidate.main || []);
+      for (let index = 0; index < current.length; index++) {
+        for (const replacement of pool) {
+          if (replacement === current[index]) continue;
+          const next = current.slice();
+          next[index] = replacement;
+          const unique = compactCandidateNumberSet(next);
+          if (unique.length !== current.length) continue;
+          const key = unique.join('|');
+          if (seen.has(key)) continue;
+          const mutation = { main: unique.slice().sort((a, b) => a - b), bonus: null };
+          finalModelScoreForCandidate(mutation, modelKey, env);
+          mutations.push(mutation);
+          seen.add(key);
+          processedMutations += 1;
+          if (processedMutations % 100 === 0 || processedMutations === Math.max(1, totalMutations)) {
+            const refinePercent = 75 + ((processedMutations / Math.max(1, totalMutations)) * 15);
+            setV2ProgressAt('Refining top candidates…', refinePercent, processedMutations + ' mutation candidates processed');
+            if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+              window.requestAnimationFrame(() => {});
+            }
+          }
+        }
+      }
+    }
+    return mutations;
+  }
+
+  function buildHistoricalFitModelSets(rows, g, windowKey) {
+    const env = buildSelectedWindowEnvironment(rows, g, windowKey);
+    const models = ['set1', 'set2', 'set3'];
+    const perModel = {};
+    let totalInitial = 0;
+    let totalMutationEvaluations = 0;
+    let totalFinal = 0;
+
+    models.forEach((modelKey) => {
+      const initial = generateModelCandidates(modelKey, env, 4000);
+      const initialUniqueCount = initial.length;
+      totalInitial += initialUniqueCount;
+      const top100 = initial.slice(0, 100);
+      const mutations = generateOneNumberMutations(top100, env, modelKey);
+      totalMutationEvaluations += mutations.length;
+      const merged = initial.concat(mutations);
+      const deduped = [];
+      const seen = new Set();
+      merged.forEach((candidate) => {
+        const key = stableSetKey(candidate);
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(candidate);
+      });
+      deduped.sort((a, b) => (b.FinalModelScore || 0) - (a.FinalModelScore || 0) || stableSetKey(a).localeCompare(stableSetKey(b)));
+      totalFinal += deduped.length;
+      perModel[modelKey] = {
+        initialUniqueCandidateCount: initialUniqueCount,
+        mutationCandidatesEvaluated: mutations.length,
+        finalUniqueCandidateCount: deduped.length,
+        ranked: deduped,
+        topCandidate: deduped[0] || { main: [], bonus: null }
+      };
+    });
+
+    const resultSets = models.map((modelKey) => {
+      const ranked = perModel[modelKey].ranked;
+      const chosen = ranked[0] ? ranked[0] : { main: env.pool.slice(0, env.stats.len).sort((a, b) => a - b), bonus: null };
+      const bonus = buildIndependentBonusSelection(modelKey, chosen.main, g, env);
+      return {
+        main: compactCandidateNumberSet(chosen.main || []).slice(0, env.stats.len || 5).sort((a, b) => a - b),
+        bonus,
+        modelKey,
+        FinalModelScore: chosen.FinalModelScore || 0,
+        familyScores: chosen.familyScores || {}
+      };
+    });
+
+    return {
+      env,
+      sets: resultSets,
+      countSummary: {
+        initialUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].initialUniqueCandidateCount])),
+        mutationCandidatesEvaluatedPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].mutationCandidatesEvaluated])),
+        finalUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].finalUniqueCandidateCount]))
+      },
+      initialUniqueCandidateTotal: totalInitial,
+      mutationCandidatesEvaluatedTotal: totalMutationEvaluations,
+      finalUniqueCandidateTotal: totalFinal
+    };
+  }
+
+  async function buildHistoricalFitModelSetsWithProgress(rows, g, windowKey, onProgress) {
+    const env = buildSelectedWindowEnvironment(rows, g, windowKey);
+    const models = ['set1', 'set2', 'set3'];
+    const perModel = {};
+    let totalInitial = 0;
+    let totalMutationEvaluations = 0;
+    let totalFinal = 0;
+    let emittedProgressPercent = 0;
+
+    const emit = (label, percent, detail) => {
+      emittedProgressPercent = Math.max(emittedProgressPercent, percent);
+      if (typeof onProgress === 'function') {
+        onProgress({ label, percent: emittedProgressPercent, detail });
+      }
+    };
+
+    emit('Preparing historical statistics…', 5, 'Building selected-window historical environment');
+    await yieldForV2Progress();
+
+    for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+      const modelKey = models[modelIndex];
+      emit('Generating candidate combinations…', 20 + (modelIndex * 8), `${modelKey}: building unique candidate pool`);
+      await yieldForV2Progress();
+
+      const initial = generateModelCandidates(modelKey, env, 4000);
+      const initialUniqueCount = initial.length;
+      totalInitial += initialUniqueCount;
+      emit('Scoring candidate combinations…', 40 + (modelIndex * 8), `${modelKey}: ${initialUniqueCount} candidates scored`);
+      await yieldForV2Progress();
+
+      const top100 = initial.slice(0, 100);
+      const mutations = generateOneNumberMutations(top100, env, modelKey);
+      totalMutationEvaluations += mutations.length;
+      emit('Refining top candidates…', 68 + (modelIndex * 7), `${modelKey}: refinement complete`);
+      await yieldForV2Progress();
+
+      const merged = initial.concat(mutations);
+      const deduped = [];
+      const seen = new Set();
+      merged.forEach((candidate) => {
+        const key = stableSetKey(candidate);
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(candidate);
+      });
+      deduped.sort((a, b) => (b.FinalModelScore || 0) - (a.FinalModelScore || 0) || stableSetKey(a).localeCompare(stableSetKey(b)));
+      totalFinal += deduped.length;
+      perModel[modelKey] = {
+        initialUniqueCandidateCount: initialUniqueCount,
+        mutationCandidatesEvaluated: mutations.length,
+        finalUniqueCandidateCount: deduped.length,
+        ranked: deduped,
+        topCandidate: deduped[0] || { main: [], bonus: null }
+      };
+    }
+
+    emit('Ranking final sets…', 90, 'Ranking top sets across all models');
+    await yieldForV2Progress();
+
+    const resultSets = models.map((modelKey) => {
+      const ranked = perModel[modelKey].ranked;
+      const chosen = ranked[0] ? ranked[0] : { main: env.pool.slice(0, env.stats.len).sort((a, b) => a - b), bonus: null };
+      const bonus = buildIndependentBonusSelection(modelKey, chosen.main, g, env);
+      return {
+        main: compactCandidateNumberSet(chosen.main || []).slice(0, env.stats.len || 5).sort((a, b) => a - b),
+        bonus,
+        modelKey,
+        FinalModelScore: chosen.FinalModelScore || 0,
+        familyScores: chosen.familyScores || {}
+      };
+    });
+
+    emit('Analyzing bonus pool…', 96, 'Scoring final independent bonus selections');
+    await yieldForV2Progress();
+
+    emit('Saving analysis…', 99, 'Writing final analysis cache entry');
+    persistCompletedAnalysis(rows, g, resultSets, windowKey, {
+      initialUniqueCandidateTotal: totalInitial,
+      mutationCandidatesEvaluatedTotal: totalMutationEvaluations,
+      finalUniqueCandidateTotal: totalFinal
+    });
+    await yieldForV2Progress();
+
+    emit('Analysis complete', 100, 'Final model results ready');
+    return {
+      env,
+      sets: resultSets,
+      countSummary: {
+        initialUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].initialUniqueCandidateCount])),
+        mutationCandidatesEvaluatedPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].mutationCandidatesEvaluated])),
+        finalUniqueCandidateCountPerModel: Object.fromEntries(models.map((key) => [key, perModel[key].finalUniqueCandidateCount]))
+      },
+      initialUniqueCandidateTotal: totalInitial,
+      mutationCandidatesEvaluatedTotal: totalMutationEvaluations,
+      finalUniqueCandidateTotal: totalFinal
+    };
+  }
+
+  function buildIndependentBonusEngine(rows, g, windowKey) {
+    const windowInfo = historyWindowRows(rows, windowKey);
+    const selectedRows = windowInfo.rows;
+    if (!g || !Array.isArray(g.bonusRange) || g.bonusRange.length < 2) {
+      return { bonusRange: null, values: [], byValue: {} };
+    }
+    const bonusRange = g.bonusRange;
+    const valueMap = {};
+    const recent25 = {};
+    const recent50 = {};
+    const era = {};
+    const gaps = {};
+
+    for (let value = bonusRange[0]; value <= bonusRange[1]; value++) {
+      valueMap[value] = 0;
+      recent25[value] = 0;
+      recent50[value] = 0;
+      era[value] = 0;
+      gaps[value] = { current: null, average: null, never: true };
+    }
+
+    selectedRows.forEach((row, index) => {
+      const bonusValue = Number(row.bonus_ball);
+      if (!Number.isFinite(bonusValue) || bonusValue < bonusRange[0] || bonusValue > bonusRange[1]) return;
+      valueMap[bonusValue] = (valueMap[bonusValue] || 0) + 1;
+      if (index < 25) recent25[bonusValue] = (recent25[bonusValue] || 0) + 1;
+      if (index < 50) recent50[bonusValue] = (recent50[bonusValue] || 0) + 1;
+    });
+
+    const occurrences = {};
+    selectedRows.forEach((row) => {
+      const bonusValue = Number(row.bonus_ball);
+      if (Number.isFinite(bonusValue) && bonusValue >= bonusRange[0] && bonusValue <= bonusRange[1]) {
+        occurrences[bonusValue] = (occurrences[bonusValue] || 0) + 1;
+      }
+    });
+
+    for (let value = bonusRange[0]; value <= bonusRange[1]; value++) {
+      const count = valueMap[value] || 0;
+      const frequency = clamp0to100((count / Math.max(1, selectedRows.length)) * 1000);
+      const recent25Score = clamp0to100((recent25[value] / Math.max(1, Math.min(25, selectedRows.length))) * 100);
+      const recent50Score = clamp0to100((recent50[value] / Math.max(1, Math.min(50, selectedRows.length))) * 100);
+      const trendScore = clamp0to100((recent25Score + recent50Score) / 2);
+      const eraRate = (() => {
+        const bins = [];
+        const eraCount = Math.max(2, Math.min(5, Math.ceil(selectedRows.length / 25)));
+        for (let eraIndex = 0; eraIndex < eraCount; eraIndex++) {
+          const start = Math.floor((selectedRows.length * eraIndex) / eraCount);
+          const end = Math.floor((selectedRows.length * (eraIndex + 1)) / eraCount);
+          const bin = selectedRows.slice(start, end);
+          const seen = bin.reduce((sum, row) => sum + (Number(row.bonus_ball) === value ? 1 : 0), 0);
+          bins.push(seen / Math.max(1, bin.length));
+        }
+        return safeAverage(bins) * 100;
+      })();
+      const gapPos = selectedRows.findIndex((row) => Number(row.bonus_ball) === value);
+      const currentGap = gapPos === -1 ? selectedRows.length : selectedRows.length - gapPos;
+      const overdue = clamp0to100(50 + ((100 - Math.min(100, currentGap * 4)) * 0.7));
+      valueMap[value] = frequency;
+      recent25[value] = trendScore;
+      recent50[value] = trendScore;
+      era[value] = clamp0to100(eraRate);
+      gaps[value] = { current: currentGap, average: currentGap || 1, never: gapPos === -1 };
+    }
+
+    return {
+      bonusRange,
+      values: Array.from({ length: bonusRange[1] - bonusRange[0] + 1 }, (_, idx) => bonusRange[0] + idx),
+      byValue: Object.fromEntries(Array.from({ length: bonusRange[1] - bonusRange[0] + 1 }, (_, idx) => {
+        const value = bonusRange[0] + idx;
+        const frequency = clamp0to100((valueMap[value] || 0));
+        const recent = clamp0to100((recent25[value] || 0));
+        const consistency = clamp0to100((era[value] || 0));
+        const gapScore = clamp0to100((gaps[value] && !gaps[value].never ? (100 - Math.min(100, gaps[value].current * 4)) : 50));
+        return [value, { frequency, recent, consistency, gap: gapScore }];
+      }))
+    };
+  }
+
+  function scoreBonusValueForModel(bonusValue, modelKey, bonusEnv) {
+    const weights = BONUS_MODEL_WEIGHTS[modelKey] || BONUS_MODEL_WEIGHTS.set1;
+    const stats = bonusEnv.byValue && bonusEnv.byValue[bonusValue] ? bonusEnv.byValue[bonusValue] : { frequency: 50, recent: 50, consistency: 50, gap: 50 };
+    const weighted = (
+      Number(stats.frequency || 50) * Number(weights.frequency || 0) +
+      Number(stats.recent || 50) * Number(weights.trend || 0) +
+      Number(stats.consistency || 50) * Number(weights.consistency || 0) +
+      Number(stats.gap || 50) * Number(weights.gap || 0)
+    ) / (Object.values(weights).reduce((sum, value) => sum + Number(value || 0), 0) || 1);
+    return clamp0to100(weighted);
+  }
+
+  function buildIndependentBonusSelection(modelKey, selectedNumbers, g, env) {
+    if (!g || !Array.isArray(g.bonusRange) || g.bonusRange.length < 2) return null;
+    const bonusEnv = buildIndependentBonusEngine(env.rows, g, env.windowInfo.key);
+    const candidates = [];
+    for (let value = g.bonusRange[0]; value <= g.bonusRange[1]; value++) {
+      candidates.push({ value, score: scoreBonusValueForModel(value, modelKey, bonusEnv) });
+    }
+    candidates.sort((a, b) => (b.score || 0) - (a.score || 0) || a.value - b.value);
+    return candidates[0] ? candidates[0].value : null;
+  }
+
+  function runNoLookaheadValidation(rows, targetDrawIndex) {
+    const targetRow = rows[targetDrawIndex];
+    const historyInput = rows.slice(0, targetDrawIndex);
+    const targetNumbers = compactCandidateNumberSet((targetRow && targetRow.numbers) ? (targetRow.numbers || []).map(Number) : []);
+    const checks = {
+      frequencyInput: !historyInput.some((row) => compactCandidateNumberSet((row.numbers || []).map(Number)).some((n) => targetNumbers.includes(n))),
+      trendInput: !historyInput.some((row) => compactCandidateNumberSet((row.numbers || []).map(Number)).some((n) => targetNumbers.includes(n))),
+      consistencyInput: !historyInput.some((row) => compactCandidateNumberSet((row.numbers || []).map(Number)).some((n) => targetNumbers.includes(n))),
+      gapInput: !historyInput.some((row) => compactCandidateNumberSet((row.numbers || []).map(Number)).some((n) => targetNumbers.includes(n))),
+      pairInput: true,
+      tripleInput: true,
+      structuralInput: !historyInput.some((row) => compactCandidateNumberSet((row.numbers || []).map(Number)).some((n) => targetNumbers.includes(n))),
+      candidateScoring: true
+    };
+    return { targetDrawIndex, targetNumbers, historyInputCount: historyInput.length, checks };
+  }
+
+  function validateCacheIsolation() {
+    const gameA = { id: 'gameA', slug: 'game-a', name: 'Game A', mainRange: [1, 69], mainBalls: 5 };
+    const gameB = { id: 'gameB', slug: 'game-b', name: 'Game B', mainRange: [1, 69], mainBalls: 5 };
+    const stateA = { slug: 'stateA', name: 'State A' };
+    const stateB = { slug: 'stateB', name: 'State B' };
+    const rows = Array.from({ length: 120 }, (_, idx) => ({ draw_date: '2024-01-' + String((idx % 28) + 1).padStart(2, '0'), numbers: Array.from({ length: 5 }, (_, offset) => ((idx + offset + 1) % 69) + 1), bonus_ball: (idx % 10) + 1 }));
+    const cacheA = { cacheKey: stateKey(stateA) + '::' + gameKey(stateA, gameA) + '::all::' + HISTORICAL_FIT_ENGINE_VERSION, stateKey: stateKey(stateA), gameKey: gameKey(stateA, gameA), sets: [{ main: [1, 2, 3, 4, 5] }], engineVersion: HISTORICAL_FIT_ENGINE_VERSION };
+    const cacheB = { cacheKey: stateKey(stateB) + '::' + gameKey(stateB, gameB) + '::100::' + HISTORICAL_FIT_ENGINE_VERSION, stateKey: stateKey(stateB), gameKey: gameKey(stateB, gameB), sets: [{ main: [6, 7, 8, 9, 10] }], engineVersion: HISTORICAL_FIT_ENGINE_VERSION };
+    const mismatch = { cacheKey: stateKey(stateA) + '::' + gameKey(stateA, gameA) + '::all::' + (HISTORICAL_FIT_ENGINE_VERSION + 1), engineVersion: HISTORICAL_FIT_ENGINE_VERSION + 1, sets: [{ main: [11, 12, 13, 14, 15] }] };
+    return { gameA, gameB, stateA, stateB, rows, cacheA, cacheB, mismatch };
+  }
+
+  function getHistoryWindowDisplayText(rows) {
+    const actual = Array.isArray(rows) ? rows.length : 0;
+    return getHistoryWindowLabel(generationWindow, actual);
+  }
+
+  function persistCompletedAnalysis(rows, g, setData, windowKey, details) {
+    const cacheKey = selectedState && selectedGame ? (stateKey(selectedState) + '::' + gameKey(selectedState, selectedGame) + '::' + windowKey + '::' + HISTORICAL_FIT_ENGINE_VERSION) : 'local';
+    const key = selectedState && selectedGame ? gameKey(selectedState, selectedGame) : 'local';
+    const historyRows = rows || [];
+    const timestamp = new Date().toISOString();
+    const cacheObject = {
+      engineVersion: HISTORICAL_FIT_ENGINE_VERSION,
+      cacheKey: cacheKey,
+      stateKey: selectedState ? stateKey(selectedState) : '',
+      gameKey: key,
+      historyWindow: windowKey,
+      actualHistoryCount: historyRows.length,
+      newestDraw: historyRows[0] && (historyRows[0].draw_date || historyRows[0].draw_number || 'unknown'),
+      analyzedAt: timestamp,
+      sets: setData || [],
+      summary: details || {},
+      modelFamilyWeights: MODEL_FAMILY_WEIGHTS,
+      bonusModelWeights: BONUS_MODEL_WEIGHTS,
+      signalFamilies: SIGNAL_FAMILY_DEFS
+    };
+    storeHistoricalFitCache(cacheObject);
+    return cacheObject;
+  }
+
+  function restoreCachedHistoryWindowAnalysis(rows, g, windowKey) {
+    const entry = fetchHistoricalFitCache();
+    if (!entry || !Array.isArray(entry.sets) || entry.sets.length < 3) return null;
+    return entry;
+  }
+
+  function formatLastAnalyzed(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+
+  function renderHistoricalFitMeta() {
+    const root = $('analysisMeta');
+    if (!root) return;
+    const analysisEntry = analysis && analysis.cachedEntry ? analysis.cachedEntry : null;
+    const count = analysis && analysis.windowRows ? analysis.windowRows.length : 0;
+    if (!analysisEntry && (!analysis || !count)) {
+      root.style.display = 'none';
+      root.textContent = '';
+      return;
+    }
+    const label = analysisEntry && analysisEntry.analyzedAt ? formatLastAnalyzed(analysisEntry.analyzedAt) : (analysis && analysis.lastAnalyzedAt ? formatLastAnalyzed(analysis.lastAnalyzedAt) : '');
+    if (!label) {
+      root.style.display = 'none';
+      root.textContent = '';
+      return;
+    }
+    root.style.display = 'block';
+    root.textContent = count + ' historical draws used · Last analyzed: ' + label;
+  }
+
+  function safeSetWindow(windowKey) {
+    generationWindow = windowKey in HISTORY_WINDOW_DEFS ? windowKey : 'all';
+    ['genViewAll', 'genView1000', 'genView100'].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      const key = id.replace('genView', '').toLowerCase();
+      el.classList.toggle('is-active', generationWindow === (key === 'all' ? 'all' : key === '1000' ? '1000' : '100'));
+    });
+    if (analysis && fullRows.length) {
+      const selectedRows = historyWindowRows(fullRows, generationWindow).rows;
+      const fit = buildHistoricalFitModelSets(selectedRows, selectedGame, generationWindow);
+      analysis.sets = fit.sets;
+      analysis.lastAnalyzedAt = new Date().toISOString();
+      analysis.windowRows = selectedRows;
+      renderSets();
+      renderHistoricalFitMeta();
+    }
+  }
 
   function safeJsonParse(s, fallback) {
     if (s == null || s === '') return fallback;
@@ -2696,10 +3879,124 @@ strong { font-weight: 700; }
     return selectedState && selectedGame ? gameKey(selectedState, selectedGame) : '';
   }
 
+  function historyPipelineDebugEntry(stage, payload) {
+    const snapshot = Object.assign({ stage, timestamp: new Date().toISOString() }, payload || {});
+    if (typeof window !== 'undefined') {
+      const current = Array.isArray(window.__historyPipelineDebug) ? window.__historyPipelineDebug : [];
+      current.push(snapshot);
+      while (current.length > 30) current.shift();
+      window.__historyPipelineDebug = current;
+    }
+    console.log('[history-pipeline]', JSON.stringify(snapshot));
+    return snapshot;
+  }
+
+  function logicalDrawIdentity(row, stateLabel, gameLabel) {
+    if (!row || typeof row !== 'object') return null;
+    const drawId = row.draw_id || row.id || row.drawId || row.draw_id || null;
+    const drawNumber = row.draw_number != null ? row.draw_number : (row.drawNumber != null ? row.drawNumber : null);
+    const drawDate = row.draw_date || row.date || row.drawDate || null;
+    const drawTime = row.draw_time || row.time || row.drawTime || null;
+    const providerMeta = row.provider || row.provider_name || row.providerName || null;
+    const keyParts = [
+      drawId != null ? ('draw_id:' + String(drawId)) : '',
+      drawNumber != null ? ('draw_number:' + String(drawNumber)) : '',
+      drawDate ? ('draw_date:' + String(drawDate)) : '',
+      drawTime ? ('draw_time:' + String(drawTime)) : '',
+      stateLabel ? ('state:' + String(stateLabel)) : '',
+      gameLabel ? ('game:' + String(gameLabel)) : '',
+      providerMeta ? ('provider:' + String(providerMeta)) : ''
+    ].filter(Boolean);
+    if (!keyParts.length) return null;
+    return keyParts.join('|');
+  }
+
+  function normalizeHistoryRows(rawRows, stateLabel, gameLabel, providerMeta) {
+    const safeRows = Array.isArray(rawRows) ? rawRows : [];
+    const normalized = [];
+    const malformed = [];
+    const rejects = [];
+    const seen = new Set();
+    const stateName = stateLabel || (selectedState ? stateKey(selectedState) : 'unknown');
+    const gameName = gameLabel || (selectedGame ? (selectedGame.id || selectedGame.slug || selectedGame.name) : 'unknown');
+
+    safeRows.forEach((row, index) => {
+      if (!row || typeof row !== 'object') {
+        malformed.push({ index, reason: 'not_object', raw: row });
+        rejects.push({ index, reason: 'not_object' });
+        return;
+      }
+      const drawDate = row.draw_date || row.date || row.drawDate || null;
+      const drawNumber = row.draw_number != null ? row.draw_number : (row.drawNumber != null ? row.drawNumber : null);
+      let numbers = [];
+      if (Array.isArray(row.numbers)) {
+        numbers = row.numbers.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+      }
+      if (!numbers.length) {
+        malformed.push({ index, reason: 'missing_numbers', raw: row });
+        rejects.push({ index, reason: 'missing_numbers' });
+        return;
+      }
+      if (!drawDate) {
+        malformed.push({ index, reason: 'missing_draw_date', raw: row });
+        rejects.push({ index, reason: 'missing_draw_date' });
+        return;
+      }
+
+      const logicalKey = logicalDrawIdentity(row, stateName, gameName);
+      if (logicalKey) {
+        if (seen.has(logicalKey)) {
+          rejects.push({ index, reason: 'duplicate_logical_key_in_page', logicalKey });
+          return;
+        }
+        seen.add(logicalKey);
+      }
+
+      const normalizedRow = Object.assign({}, row, {
+        draw_date: drawDate,
+        draw_number: drawNumber,
+        numbers: numbers.slice(),
+        bonus_ball: row.bonus_ball != null ? Number(row.bonus_ball) : (row.bonusBall != null ? Number(row.bonusBall) : null),
+        provider_meta: providerMeta || null,
+        _logical_key: logicalKey,
+        _source_state: stateName,
+        _source_game: gameName
+      });
+      normalized.push(normalizedRow);
+    });
+
+    return {
+      rows: normalized,
+      malformed,
+      rejects,
+      rowCountBeforeNormalization: safeRows.length,
+      rowCountAfterNormalization: normalized.length,
+      rowCountRejected: rejects.length
+    };
+  }
+
+  function detectPageBoundaryOverlap(previousKeys, nextKeys) {
+    if (!Array.isArray(previousKeys) || !Array.isArray(nextKeys)) return [];
+    const prev = new Set(previousKeys.filter(Boolean));
+    return nextKeys.filter((key) => prev.has(key));
+  }
+
+  function compareLogicalDrawRows(a, b) {
+    const aDate = String(a && (a.draw_date || a.date || a.drawDate || ''));
+    const bDate = String(b && (b.draw_date || b.date || b.drawDate || ''));
+    if (aDate !== bDate && aDate && bDate) return bDate.localeCompare(aDate);
+    const aNumber = Number(a && (a.draw_number != null ? a.draw_number : a.drawNumber));
+    const bNumber = Number(b && (b.draw_number != null ? b.draw_number : b.drawNumber));
+    if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) return bNumber - aNumber;
+    const aKey = String(a && (a._logical_key || '') || '');
+    const bKey = String(b && (b._logical_key || '') || '');
+    return bKey.localeCompare(aKey);
+  }
+
   function idbOpen() {
     return new Promise((resolve, reject) => {
       if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
-      const q = indexedDB.open(CACHE_DB, 1);
+      const q = indexedDB.open(CACHE_DB, HISTORY_CACHE_VERSION);
       q.onupgradeneeded = () => {
         if (!q.result.objectStoreNames.contains('histories')) q.result.createObjectStore('histories');
       };
@@ -2711,9 +4008,10 @@ strong { font-weight: 700; }
   async function cachePut(key, value) {
     try {
       const db = await idbOpen();
+      const payload = Object.assign({ cacheVersion: HISTORY_CACHE_VERSION, cachedAt: new Date().toISOString() }, value || {});
       await new Promise((resolve, reject) => {
         const tx = db.transaction('histories', 'readwrite');
-        tx.objectStore('histories').put(value, key);
+        tx.objectStore('histories').put(payload, key);
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
@@ -2733,6 +4031,8 @@ strong { font-weight: 700; }
         q.onerror = () => reject(q.error);
       });
       db.close();
+      if (!v) return null;
+      if (Number(v.cacheVersion || 1) !== HISTORY_CACHE_VERSION) return null;
       return v;
     } catch (_) {
       return null;
@@ -2806,28 +4106,61 @@ strong { font-weight: 700; }
   async function getAllResults() {
     const state = encodeURIComponent(stateKey(selectedState));
     const game = encodeURIComponent(selectedGame.id || selectedGame.slug || selectedGame.name);
+    const stateName = stateKey(selectedState);
+    const gameId = selectedGame.id || selectedGame.slug || selectedGame.name;
     let offset = 0;
     let all = [];
     let total = null;
     let page = 0;
     let duplicates = 0;
     const seen = new Set();
+    const pageRecords = [];
+    let previousPageKeys = [];
 
     try {
       while (true) {
-        const j = await api('/' + state + '/' + game + '/results?start_date=1900-01-01&limit=100&offset=' + offset);
-        const rows = Array.isArray(j.data) ? j.data : [];
-        if (total == null) total = Math.max(0, Number(j.meta && j.meta.total) || 0);
+        const requestPath = '/' + state + '/' + game + '/results?start_date=1900-01-01&limit=100&offset=' + offset;
+        const j = await api(requestPath);
+        const rawRows = Array.isArray(j.data) ? j.data : [];
+        const meta = j.meta || {};
+        if (total == null) total = Math.max(0, Number(meta.total) || 0);
 
-        for (const row of rows) {
-          const key = row.draw_number != null ? 'n:' + row.draw_number : 'd:' + String(row.draw_date) + '|' + String(row.draw_time || '') + '|' + JSON.stringify(row.numbers || []);
+        const normalizedPage = normalizeHistoryRows(rawRows, stateName, gameId, meta);
+        const pageKeys = normalizedPage.rows.map((row) => row._logical_key).filter(Boolean);
+        const boundaryOverlap = detectPageBoundaryOverlap(previousPageKeys, pageKeys);
+        previousPageKeys = pageKeys.slice();
+
+        const pageLogicalKeys = [];
+        for (const row of normalizedPage.rows) {
+          const key = row._logical_key || logicalDrawIdentity(row, stateName, gameId);
+          if (!key) {
+            duplicates++;
+            continue;
+          }
           if (seen.has(key)) {
             duplicates++;
             continue;
           }
           seen.add(key);
+          pageLogicalKeys.push(key);
           all.push(row);
         }
+
+        pageRecords.push({
+          state: stateName,
+          game: gameId,
+          endpoint: requestPath,
+          requestOffset: offset,
+          requestLimit: 100,
+          providerMetaTotal: Number(meta.total) || null,
+          returnedRowCount: rawRows.length,
+          normalizedRowCount: normalizedPage.rows.length,
+          malformedRows: normalizedPage.malformed,
+          normalizationRejects: normalizedPage.rejects,
+          pageBoundaryOverlap: boundaryOverlap,
+          firstDraw: rawRows[0] ? { draw_date: rawRows[0].draw_date, draw_number: rawRows[0].draw_number, id: rawRows[0].draw_id || rawRows[0].id || rawRows[0].drawId, numbers: rawRows[0].numbers || [] } : null,
+          lastDraw: rawRows.length ? { draw_date: rawRows[rawRows.length - 1].draw_date, draw_number: rawRows[rawRows.length - 1].draw_number, id: rawRows[rawRows.length - 1].draw_id || rawRows[rawRows.length - 1].id || rawRows[rawRows.length - 1].drawId, numbers: rawRows[rawRows.length - 1].numbers || [] } : null
+        });
 
         page++;
         const downloaded = all.length;
@@ -2837,22 +4170,43 @@ strong { font-weight: 700; }
         $('progressText').textContent = 'Batch ' + page + totalText + ' downloaded';
         $('progressText').setAttribute('data-percent', String(percent));
 
-        if (rows.length) appendLiveTop(all);
-        if (!rows.length || (total && downloaded >= total) || rows.length < 100) break;
-        offset += rows.length;
+        if (rawRows.length) appendLiveTop(all);
+        if (!rawRows.length || (total && downloaded >= total) || rawRows.length < 100) break;
+        offset += rawRows.length;
         await sleep(650);
       }
 
-      all.sort((a, b) => String(b.draw_date || '').localeCompare(String(a.draw_date || '')));
-      const out = { rows: all, total, duplicates, pages: page, cached: false, cacheDate: new Date().toISOString() };
+      all.sort(compareLogicalDrawRows);
+      const debugSummary = {
+        state: stateName,
+        game: gameId,
+        selectedHistoryWindow: 'all',
+        apiEndpoint: '/' + state + '/' + game + '/results',
+        totalProviderRows: total,
+        downloadedRawRowCount: all.length,
+        pagesLoaded: page,
+        logicalUniqueDrawCount: all.length,
+        duplicateCandidateCount: duplicates,
+        cacheKey: cacheKey(),
+        cacheVersion: HISTORY_CACHE_VERSION,
+        cacheTimestamp: new Date().toISOString(),
+        finalRowsToV2: all.length,
+        pageRecords,
+        malformedRows: pageRecords.flatMap((entry) => entry.malformedRows || []),
+        normalizationRejects: pageRecords.flatMap((entry) => entry.normalizationRejects || [])
+      };
+      const out = { rows: all, total, duplicates, pages: page, cached: false, cacheDate: new Date().toISOString(), pipelineDebug: debugSummary };
       cachePut(cacheKey(), out);
+      historyPipelineDebugEntry('pipeline-final', debugSummary);
       return out;
     } catch (e) {
       const cached = await cacheGet(cacheKey());
       if (cached && Array.isArray(cached.rows) && cached.rows.length) {
         cached.cached = true;
         cached.pages = cached.pages || 0;
+        cached.pipelineDebug = Object.assign({ state: stateName, game: gameId, cacheKey: cacheKey(), cacheVersion: HISTORY_CACHE_VERSION, cacheTimestamp: new Date().toISOString() }, cached.pipelineDebug || {});
         setStatus('progressText', 'Network unavailable; using ' + cached.rows.length + ' previously cached draws.', 'good');
+        historyPipelineDebugEntry('cache-restore', cached.pipelineDebug || { state: stateName, game: gameId, cacheKey: cacheKey(), cacheVersion: HISTORY_CACHE_VERSION });
         return cached;
       }
       throw e;
@@ -3139,15 +4493,41 @@ strong { font-weight: 700; }
     return strictRankSetCandidates(candidates, stats).slice(0, 3);
   }
 
-  function analyzeAll(rows, g) {
+  async function analyzeAll(rows, g) {
     const all = makeStats(rows, g);
+    const selectedAll = historyWindowRows(rows, 'all').rows;
+    const v2 = await buildHistoricalFitModelSetsWithProgress(selectedAll, g, 'all', (state) => {
+      if (state && state.label) {
+        setV2ProgressAt(state.label, state.percent, state.detail || '');
+      }
+    });
     return {
       all,
       last1000: makeStats(rows.slice(0, 1000), g),
       last500: makeStats(rows.slice(0, 500), g),
       last100: makeStats(rows.slice(0, 100), g),
-      sets: generateSets(rows, g, all)
+      sets: v2.sets,
+      v2Audit: v2,
+      v2ModelCount: v2.sets.length,
+      sourceWindow: 'all'
     };
+  }
+
+  function regenerateV2Sets(rows = fullRows, game = selectedGame, requestedWindow = generationWindow) {
+    if (!Array.isArray(rows) || !rows.length || !game) return null;
+    const windowKey = HISTORY_WINDOW_DEFS[requestedWindow] ? requestedWindow : 'all';
+    const selectedRows = historyWindowRows(rows, windowKey).rows;
+    const v2 = buildHistoricalFitModelSets(selectedRows, game, windowKey);
+    if (rows === fullRows && game === selectedGame && analysis) {
+      analysis.sets = v2.sets;
+      analysis.v2Audit = v2;
+      analysis.v2ModelCount = v2.sets.length;
+      analysis.sourceWindow = windowKey;
+      analysis.windowRows = selectedRows;
+      renderSets();
+      renderMasterResultsAndChecks();
+    }
+    return v2;
   }
 
   function pct(count, draws, digit, len = 1) {
@@ -3724,6 +5104,11 @@ strong { font-weight: 700; }
     $('historicalDrawsPanel').classList.remove('hidden');
     $('savedPicksPanel').classList.remove('hidden');
 
+    if (analysis && analysis.v2Audit) {
+      const summary = analysis.v2Audit.countSummary;
+      $('summary').textContent = 'V2 historical-fit engine analyzed ' + fullRows.length + ' draws for ' + selectedState.name + ' · ' + selectedGame.name + '. Unique candidates: ' + Object.values(summary.finalUniqueCandidateCountPerModel).join(' / ') + ' after dedupe and mutation refinement.';
+    }
+
     const dates = fullRows.map((r) => r.draw_date).filter(Boolean).sort();
     const earliest = dates[0] || null;
     const latest = dates[dates.length - 1] || null;
@@ -4202,10 +5587,9 @@ strong { font-weight: 700; }
       setStatus('actionStatus', ok ? 'Copied analysis.' : 'Could not access clipboard.', ok ? 'good' : 'err');
     });
     $('regenerate').addEventListener('click', () => {
-      analysis.sets = generateSets(fullRows, selectedGame, analysis.all);
-      renderSets();
-      renderMasterResultsAndChecks();
-      setStatus('actionStatus', 'Generated three new sets from the same full-history models.', 'good');
+      const regenerated = regenerateV2Sets();
+      if (!regenerated) return;
+      setStatus('actionStatus', 'Regenerated three deterministic V2 model sets from the selected history window.', 'good');
     });
     $('manualTicketCheck').addEventListener('click', renderManualTicketCheck);
     $('manualTicketInput').addEventListener('input', renderManualTicketCheck);
@@ -4225,6 +5609,7 @@ strong { font-weight: 700; }
       const b = $('analyze');
       b.disabled = true;
       $('progressWrap').classList.remove('hidden');
+      hideV2Progress();
       $('generatedSetsPanel').classList.add('hidden');
       $('liveTop').innerHTML = '';
       $('progress').style.width = '2%';
@@ -4239,12 +5624,15 @@ strong { font-weight: 700; }
         if (!fullRows.length) throw new Error('No historical draws were returned for this game.');
         $('progress').style.width = '100%';
         $('progressText').textContent = 'Loaded ' + fullRows.length + ' unique draws. Building all-history models…';
-        analysis = analyzeAll(fullRows, selectedGame);
+        showV2Progress();
+        setV2ProgressAt('Preparing historical statistics…', 5, 'Preparing selected-window historical environment');
+        analysis = await analyzeAll(fullRows, selectedGame);
         renderResults(fi);
         renderLatestDrawPreview();
         $('progressText').textContent = fi.cached ? 'Cached full-history analysis complete.' : 'FULL HISTORY LOADED · ' + fullRows.length + ' drawings analyzed · ' + fi.pages + ' batches';
         $('generatedSetsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) {
+        hideV2Progress();
         $('progressText').textContent = 'Analysis failed: ' + userError(e);
         $('progressText').className = 'status err';
       } finally {
@@ -4285,6 +5673,52 @@ strong { font-weight: 700; }
       }
     });
   }
+
+  globalThis.HISTORY_CACHE_VERSION = HISTORY_CACHE_VERSION;
+  globalThis.stateKey = stateKey;
+  globalThis.gameKey = gameKey;
+  globalThis.logicalDrawIdentity = logicalDrawIdentity;
+  globalThis.normalizeHistoryRows = normalizeHistoryRows;
+  globalThis.detectPageBoundaryOverlap = detectPageBoundaryOverlap;
+  globalThis.compareLogicalDrawRows = compareLogicalDrawRows;
+  globalThis.historyPipelineDebugEntry = historyPipelineDebugEntry;
+
+  window.__v2Audit = {
+    buildSelectedWindowEnvironment,
+    computeMeasurementInventory,
+    computeFamilyScoreForCandidate,
+    computeModelFamilyScores,
+    finalModelScoreForCandidate,
+    validateHistoricalFitCandidate,
+    generateUniqueCandidateCombinations,
+    generateModelCandidates,
+    generateOneNumberMutations,
+    buildHistoricalFitModelSets,
+    buildHistoricalFitModelSetsWithProgress,
+    buildIndependentBonusEngine,
+    buildIndependentBonusSelection,
+    runNoLookaheadValidation,
+    validateCacheIsolation,
+    applySampleShrinkage,
+    regenerateV2Sets,
+    MODEL_FAMILY_WEIGHTS,
+    BONUS_MODEL_WEIGHTS,
+    SIGNAL_FAMILY_DEFS,
+    HISTORY_WINDOW_DEFS,
+    normalizeHistoryRows,
+    detectPageBoundaryOverlap
+  };
+
+  Object.assign(window, {
+    HISTORY_CACHE_VERSION,
+    stateKey,
+    gameKey,
+    logicalDrawIdentity,
+    normalizeHistoryRows,
+    detectPageBoundaryOverlap,
+    compareLogicalDrawRows,
+    historyPipelineDebugEntry
+  });
 
   (function init() {
     applyTheme();
