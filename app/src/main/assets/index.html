@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Satan's Memory Lotto</title>
+<title>Make Informed Decisions</title>
 <style>
 :root {
   color-scheme: light;
@@ -260,6 +260,21 @@ strong { font-weight: 700; }
   border-radius: var(--panel-radius);
   box-shadow: var(--shadow);
   padding: var(--panel-padding);
+}
+.selector-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.selector-row .panel {
+  margin: 0;
+  min-width: 0;
+}
+.selector-row .panel-head {
+  margin-bottom: 0;
+}
+.selector-row .selector-trigger {
+  width: 100%;
 }
 .panel-inline {
   background: var(--surface-soft);
@@ -1022,6 +1037,13 @@ strong { font-weight: 700; }
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+.glossary-nav button.is-inactive {
+  background: var(--surface-alt);
+  border-color: var(--line);
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
 .glossary-notice {
   margin: 0;
   padding: 12px 14px 0;
@@ -1221,7 +1243,7 @@ strong { font-weight: 700; }
 <main class="wrap">
   <header class="topbar" aria-label="Application toolbar">
     <div class="brand">
-      <h1>Satan's Memory Lotto</h1>
+      <h1>Make Informed Decisions</h1>
     </div>
     <div class="topbar-actions">
       <button id="appearanceToggle" class="pill" type="button" aria-label="Open appearance settings">Appearance</button>
@@ -1231,43 +1253,45 @@ strong { font-weight: 700; }
   </header>
 
   <div class="main-sections" id="mainSections">
-    <section id="statePanel" class="panel" data-panel-key="statePanel">
-      <div class="panel-head">
-        <div class="step">State</div>
-        <button id="stateTrigger" class="selector-trigger" type="button" aria-expanded="false">
-          <span class="meta"><span>State</span><strong id="stateSelectedLabel">Choose state</strong></span>
-        </button>
-      </div>
-      <div id="statePicker" class="picker-sheet hidden" aria-label="State selector panel">
-        <div class="sheet-header">
-          <h3>Select state</h3>
-          <button id="closeStatePicker" class="small-icon" type="button" aria-label="Close state selector">✕</button>
+    <div class="selector-row">
+      <section id="statePanel" class="panel" data-panel-key="statePanel">
+        <div class="panel-head">
+          <div class="step">State</div>
+          <button id="stateTrigger" class="selector-trigger" type="button" aria-expanded="false">
+            <span class="meta"><span>State</span><strong id="stateSelectedLabel">Choose state</strong></span>
+          </button>
         </div>
-        <input id="stateSearch" class="search-box" type="search" placeholder="Search states, favorites, abbreviations" aria-label="Search states">
-        <div id="stateStatus" class="status">Loading supported lottery states…</div>
-        <button id="retryStates" class="action secondary hidden" type="button">Retry loading states</button>
-        <div id="states" class="picker-list" aria-live="polite"></div>
-      </div>
-    </section>
+        <div id="statePicker" class="picker-sheet hidden" aria-label="State selector panel">
+          <div class="sheet-header">
+            <h3>Select state</h3>
+            <button id="closeStatePicker" class="small-icon" type="button" aria-label="Close state selector">✕</button>
+          </div>
+          <input id="stateSearch" class="search-box" type="search" placeholder="Search states, favorites, abbreviations" aria-label="Search states">
+          <div id="stateStatus" class="status">Loading supported lottery states…</div>
+          <button id="retryStates" class="action secondary hidden" type="button">Retry loading states</button>
+          <div id="states" class="picker-list" aria-live="polite"></div>
+        </div>
+      </section>
 
-    <section id="gamePanel" class="panel" data-panel-key="gamePanel">
-      <div class="panel-head">
-        <div class="step">Game</div>
-        <button id="gameTrigger" class="selector-trigger" type="button" aria-expanded="false">
-          <span class="meta"><span>Game</span><strong id="gameSelectedLabel">Choose game</strong></span>
-        </button>
-      </div>
-      <div id="gamePicker" class="picker-sheet hidden" aria-label="Game selector panel">
-        <div class="sheet-header">
-          <h3>Select game</h3>
-          <button id="closeGamePicker" class="small-icon" type="button" aria-label="Close game selector">✕</button>
+      <section id="gamePanel" class="panel" data-panel-key="gamePanel">
+        <div class="panel-head">
+          <div class="step">Game</div>
+          <button id="gameTrigger" class="selector-trigger" type="button" aria-expanded="false">
+            <span class="meta"><span>Game</span><strong id="gameSelectedLabel">Choose game</strong></span>
+          </button>
         </div>
-        <input id="gameSearch" class="search-box" type="search" placeholder="Search games, rules, or ball count" aria-label="Search games">
-        <div id="gameStatus" class="status"></div>
-        <button id="retryGames" class="action secondary hidden" type="button">Retry loading games</button>
-        <div id="games" class="picker-list" aria-live="polite"></div>
-      </div>
-    </section>
+        <div id="gamePicker" class="picker-sheet hidden" aria-label="Game selector panel">
+          <div class="sheet-header">
+            <h3>Select game</h3>
+            <button id="closeGamePicker" class="small-icon" type="button" aria-label="Close game selector">✕</button>
+          </div>
+          <input id="gameSearch" class="search-box" type="search" placeholder="Search games, rules, or ball count" aria-label="Search games">
+          <div id="gameStatus" class="status"></div>
+          <button id="retryGames" class="action secondary hidden" type="button">Retry loading games</button>
+          <div id="games" class="picker-list" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
 
     <section id="analyzePanel" class="panel" data-panel-key="analyzePanel">
       <div class="panel-head">
@@ -1729,7 +1753,7 @@ strong { font-weight: 700; }
       <div class="appearance-group">
         <h4>Theme</h4>
         <div class="appearance-option-row">
-          <button class="appearance-option" data-appearance-theme="default" type="button">Satan's Memory Lotto</button>
+          <button class="appearance-option" data-appearance-theme="default" type="button">Make Informed Decisions</button>
           <button class="appearance-option" data-appearance-theme="high-contrast" type="button">High Contrast</button>
           <button class="appearance-option" data-appearance-theme="light" type="button">Light</button>
         </div>
@@ -1935,24 +1959,26 @@ strong { font-weight: 700; }
     order: [
       'statePanel',
       'gamePanel',
-      'masterGameDataPanel',
-      'analyzePanel',
       'resultsCheckingPanel',
       'savedPicksPanel',
       'generatedSetsPanel',
+      'masterGameDataPanel',
+      'analyzePanel',
       'historicalDrawsPanel',
       'frequencyExplorerPanel',
       'hotNumbersPanel',
       'coldNumbersPanel',
+      'gapExplorerPanel',
+      'customWeightedSetPanel',
+      'patternStatsPanel'
+    ],
+    hidden: [
       'fullFrequencyTablePanel',
       'bonusBallFrequencyPanel',
       'frequencyChartPanel',
-      'gapExplorerPanel',
       'mainNumberGapsPanel',
       'bonusBallGapsPanel',
       'currentGapChartPanel',
-      'customWeightedSetPanel',
-      'patternStatsPanel',
       'pairStatisticsPanel',
       'tripleStatisticsPanel',
       'oddEvenStatsPanel',
@@ -1961,22 +1987,6 @@ strong { font-weight: 700; }
       'consecutiveNumbersPanel',
       'repeatPreviousStatsPanel',
       'analyticsPanel'
-    ],
-    hidden: [
-      'analyticsPanel',
-      'pairStatisticsPanel',
-      'tripleStatisticsPanel',
-      'oddEvenStatsPanel',
-      'highLowStatsPanel',
-      'sumDistributionPanel',
-      'consecutiveNumbersPanel',
-      'repeatPreviousStatsPanel',
-      'fullFrequencyTablePanel',
-      'bonusBallFrequencyPanel',
-      'frequencyChartPanel',
-      'mainNumberGapsPanel',
-      'bonusBallGapsPanel',
-      'currentGapChartPanel'
     ]
   };
 
@@ -2293,8 +2303,12 @@ strong { font-weight: 700; }
 
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     const nav = $('glossaryNav');
-    nav.innerHTML = letters.map((letter) => '<button class="' + (filtered.some((entry) => entry.term.toUpperCase().startsWith(letter)) ? 'is-active' : '') + '" type="button" data-glossary-letter="' + letter + '">' + letter + '</button>').join('');
+    nav.innerHTML = letters.map((letter) => {
+      const hasTerms = filtered.some((entry) => entry.term.toUpperCase().startsWith(letter));
+      return '<button class="' + (hasTerms ? 'is-active' : 'is-inactive') + '" type="button" data-glossary-letter="' + letter + '" ' + (hasTerms ? '' : 'disabled') + '>' + letter + '</button>';
+    }).join('');
     nav.querySelectorAll('[data-glossary-letter]').forEach((button) => {
+      if (button.disabled) return;
       button.addEventListener('click', () => {
         const targetLetter = button.dataset.glossaryLetter;
         const target = list.querySelector('[data-letter="' + targetLetter + '"]');
@@ -3686,17 +3700,12 @@ strong { font-weight: 700; }
 
   function movePanel(key, delta) {
     const config = layoutPrefs();
-    const idx = config.order.indexOf(key);
-    if (idx < 0) return;
-    const panel = document.getElementById(key);
-    if (!panel) return;
-    const siblingKeys = [...panel.parentElement.querySelectorAll(':scope > [data-panel-key]')].map((el) => el.dataset.panelKey);
-    const siblingIndex = siblingKeys.indexOf(key);
-    const nextSiblingIndex = siblingIndex + delta;
-    if (siblingIndex < 0 || nextSiblingIndex < 0 || nextSiblingIndex >= siblingKeys.length) return;
-    const nextKey = siblingKeys[nextSiblingIndex];
     const order = config.order.slice();
-    const nextIdx = order.indexOf(nextKey);
+    const idx = order.indexOf(key);
+    if (idx < 0) return;
+    if (['statePanel', 'gamePanel'].includes(key)) return;
+    const nextIdx = idx + delta;
+    if (nextIdx < 0 || nextIdx >= order.length) return;
     [order[idx], order[nextIdx]] = [order[nextIdx], order[idx]];
     config.order = order;
     saveLayoutPrefs(config);
@@ -3719,8 +3728,23 @@ strong { font-weight: 700; }
 
   function restoreDefaultLayout() {
     saveLayoutPrefs(DEFAULT_LAYOUT);
+    const defaultOpen = new Set([
+      'statePanel',
+      'gamePanel',
+      'resultsCheckingPanel',
+      'savedPicksPanel',
+      'generatedSetsPanel',
+      'analyzePanel'
+    ]);
+    const nextPrefs = {};
+    document.querySelectorAll('.accordion-card').forEach((card) => {
+      const key = card.dataset.accordionKey || card.dataset.panelKey || card.closest('[data-panel-key]')?.dataset.panelKey;
+      if (key) nextPrefs[key] = defaultOpen.has(key);
+    });
+    saveAccordionPrefs(nextPrefs);
     applyDashboardLayout();
     renderLayoutEditor();
+    initAccordions();
   }
 
   function humanizeKey(key) {
@@ -3771,9 +3795,7 @@ strong { font-weight: 700; }
 
     $('layoutVisibleList').innerHTML = visible.length ? visible.map((key) => {
       const isFixed = ['statePanel', 'gamePanel'].includes(key);
-      const actionMarkup = isFixed ?
-        '<button data-role="up" data-panel="' + key + '" class="layout-action" disabled type="button">↑</button>' +
-        '<button data-role="down" data-panel="' + key + '" class="layout-action" disabled type="button">↓</button>' :
+      const actionMarkup = isFixed ? '' :
         '<button data-role="up" data-panel="' + key + '" class="layout-action" type="button">↑</button>' +
         '<button data-role="down" data-panel="' + key + '" class="layout-action" type="button">↓</button>' +
         '<button data-role="hide" data-panel="' + key + '" class="layout-action danger" type="button">Hide</button>';
@@ -3798,12 +3820,19 @@ strong { font-weight: 700; }
 
   function initAccordions() {
     const saved = accordionPrefs();
-    const collapsedByDefault = new Set(['frequencyExplorerPanel', 'gapExplorerPanel', 'patternStatsPanel', 'customWeightedSetPanel', 'historicalDrawsPanel']);
+    const expandedByDefault = new Set([
+      'statePanel',
+      'gamePanel',
+      'resultsCheckingPanel',
+      'savedPicksPanel',
+      'generatedSetsPanel',
+      'analyzePanel'
+    ]);
     document.querySelectorAll('.accordion-card').forEach((card, index) => {
       const key = card.dataset.accordionKey || card.dataset.panelKey || card.closest('[data-panel-key]')?.dataset.panelKey || 'section-' + index;
       card.dataset.accordionKey = key;
       const hasSaved = Object.prototype.hasOwnProperty.call(saved, key);
-      const isOpen = hasSaved ? saved[key] !== false : !collapsedByDefault.has(key);
+      const isOpen = hasSaved ? saved[key] !== false : expandedByDefault.has(key);
       card.classList.toggle('open', isOpen);
       const button = card.querySelector('.accordion-button');
       if (button) {
