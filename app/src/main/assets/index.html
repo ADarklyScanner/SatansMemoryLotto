@@ -1221,7 +1221,6 @@ strong { font-weight: 700; }
   <header class="topbar" aria-label="Application toolbar">
     <div class="brand">
       <h1>Satan's Memory Lotto</h1>
-      <div class="brand-badge">Full feature build</div>
     </div>
     <div class="topbar-actions">
       <button id="themeToggle" class="pill" type="button" aria-label="Toggle dark mode">Dark mode</button>
@@ -3559,9 +3558,10 @@ strong { font-weight: 700; }
   }
 
   function applyTheme() {
-    const dark = prefs().theme === 'dark';
+    const settings = currentAppearance();
+    const dark = settings.theme === 'default';
     document.body.classList.toggle('dark', dark);
-    $('themeToggle').textContent = dark ? 'Light mode' : 'Dark mode';
+    $('themeToggle').textContent = settings.theme === 'light' ? 'Dark mode' : 'Light mode';
   }
 
   function appearanceDefaults() {
@@ -3753,11 +3753,13 @@ strong { font-weight: 700; }
 
     $('layoutVisibleList').innerHTML = visible.length ? visible.map((key) => {
       const isFixed = ['statePanel', 'gamePanel'].includes(key);
-      return '<li class="layout-item"><span class="layout-item-name">' + escapeHtml(humanizeKey(key)) + '</span><span class="layout-actions-group">' +
-        '<button data-role="up" data-panel="' + key + '" class="layout-action" ' + (isFixed ? 'disabled' : '') + ' type="button">↑</button>' +
-        '<button data-role="down" data-panel="' + key + '" class="layout-action" ' + (isFixed ? 'disabled' : '') + ' type="button">↓</button>' +
-        '<button data-role="hide" data-panel="' + key + '" class="layout-action danger" ' + (isFixed ? 'disabled' : '') + ' type="button">Hide</button>' +
-        '</span></li>';
+      const actionMarkup = isFixed ?
+        '<button data-role="up" data-panel="' + key + '" class="layout-action" disabled type="button">↑</button>' +
+        '<button data-role="down" data-panel="' + key + '" class="layout-action" disabled type="button">↓</button>' :
+        '<button data-role="up" data-panel="' + key + '" class="layout-action" type="button">↑</button>' +
+        '<button data-role="down" data-panel="' + key + '" class="layout-action" type="button">↓</button>' +
+        '<button data-role="hide" data-panel="' + key + '" class="layout-action danger" type="button">Hide</button>';
+      return '<li class="layout-item"><span class="layout-item-name">' + escapeHtml(humanizeKey(key)) + '</span><span class="layout-actions-group">' + actionMarkup + '</span></li>';
     }).join('') : '<li class="empty-state">Nothing visible.</li>';
 
     $('layoutHiddenList').innerHTML = hidden.length ? hidden.map((key) => '<li class="layout-item"><span class="layout-item-name">' + escapeHtml(humanizeKey(key)) + '</span><span class="layout-actions-group"><button data-role="show" data-panel="' + key + '" class="layout-action" type="button">Add</button></span></li>').join('') : '<li class="empty-state">No hidden panels.</li>';
@@ -3903,8 +3905,10 @@ strong { font-weight: 700; }
 
   function attachEvents() {
     $('themeToggle').addEventListener('click', () => {
-      const next = prefs().theme === 'dark' ? 'light' : 'dark';
-      savePrefs({ theme: next });
+      const settings = currentAppearance();
+      const next = settings.theme === 'light' ? 'default' : 'light';
+      saveAppearance({ ...settings, theme: next });
+      applyAppearanceSettings();
       applyTheme();
     });
 
