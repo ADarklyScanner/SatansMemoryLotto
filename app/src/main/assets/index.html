@@ -95,6 +95,30 @@ body[data-appearance-theme="default"] {
   --toggle: rgba(255, 215, 0, 0.16);
 }
 
+body[data-appearance-theme="default"][data-appearance-mode="light"] {
+  color-scheme: light;
+  --bg: #f6f0fb;
+  --surface: #ffffff;
+  --surface-alt: #f6f0ff;
+  --surface-soft: #f0e6ff;
+  --text: #2d1739;
+  --muted: #685a74;
+  --line: #e7d6f0;
+  --line-strong: rgba(116, 32, 123, 0.8);
+  --accent: #BF40BF;
+  --accent-strong: #74207B;
+  --accent-soft: rgba(191, 64, 191, 0.12);
+  --success: #6f6a79;
+  --warning: #d7a500;
+  --danger: #c31e1e;
+  --shadow: 0 12px 28px rgba(51, 38, 62, 0.12);
+  --button-text: #fffafc;
+  --chip-bg: #f9f3ff;
+  --chip-border: #dbc7ef;
+  --track: #e7daf5;
+  --toggle: #ece1f7;
+}
+
 body[data-appearance-theme="high-contrast"] {
   color-scheme: dark;
   --bg: #000000;
@@ -3559,13 +3583,13 @@ strong { font-weight: 700; }
 
   function applyTheme() {
     const settings = currentAppearance();
-    const dark = settings.theme === 'default';
+    const dark = settings.mode !== 'light';
     document.body.classList.toggle('dark', dark);
-    $('themeToggle').textContent = settings.theme === 'light' ? 'Dark mode' : 'Light mode';
+    $('themeToggle').textContent = dark ? 'Light mode' : 'Dark mode';
   }
 
   function appearanceDefaults() {
-    return { theme: 'default', textSize: 'normal', density: 'normal' };
+    return { theme: 'default', mode: 'dark', textSize: 'normal', density: 'normal' };
   }
 
   function currentAppearance() {
@@ -3597,6 +3621,7 @@ strong { font-weight: 700; }
   function applyAppearanceSettings() {
     const settings = currentAppearance();
     document.body.dataset.appearanceTheme = settings.theme;
+    document.body.dataset.appearanceMode = settings.mode || 'dark';
     document.body.dataset.textSize = settings.textSize;
     document.body.dataset.density = settings.density;
 
@@ -3906,8 +3931,9 @@ strong { font-weight: 700; }
   function attachEvents() {
     $('themeToggle').addEventListener('click', () => {
       const settings = currentAppearance();
-      const next = settings.theme === 'light' ? 'default' : 'light';
-      saveAppearance({ ...settings, theme: next });
+      if (settings.theme === 'high-contrast') return;
+      const nextMode = settings.mode === 'light' ? 'dark' : 'light';
+      saveAppearance({ ...settings, mode: nextMode });
       applyAppearanceSettings();
       applyTheme();
     });
