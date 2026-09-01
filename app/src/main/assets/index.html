@@ -1935,8 +1935,12 @@ strong { font-weight: 700; }
     order: [
       'statePanel',
       'gamePanel',
+      'masterGameDataPanel',
       'analyzePanel',
+      'resultsCheckingPanel',
+      'savedPicksPanel',
       'generatedSetsPanel',
+      'historicalDrawsPanel',
       'frequencyExplorerPanel',
       'hotNumbersPanel',
       'coldNumbersPanel',
@@ -1947,6 +1951,7 @@ strong { font-weight: 700; }
       'mainNumberGapsPanel',
       'bonusBallGapsPanel',
       'currentGapChartPanel',
+      'customWeightedSetPanel',
       'patternStatsPanel',
       'pairStatisticsPanel',
       'tripleStatisticsPanel',
@@ -1955,14 +1960,24 @@ strong { font-weight: 700; }
       'sumDistributionPanel',
       'consecutiveNumbersPanel',
       'repeatPreviousStatsPanel',
-      'customWeightedSetPanel',
-      'historicalDrawsPanel',
-      'savedPicksPanel',
-      'masterGameDataPanel',
-      'resultsCheckingPanel',
       'analyticsPanel'
     ],
-    hidden: []
+    hidden: [
+      'analyticsPanel',
+      'pairStatisticsPanel',
+      'tripleStatisticsPanel',
+      'oddEvenStatsPanel',
+      'highLowStatsPanel',
+      'sumDistributionPanel',
+      'consecutiveNumbersPanel',
+      'repeatPreviousStatsPanel',
+      'fullFrequencyTablePanel',
+      'bonusBallFrequencyPanel',
+      'frequencyChartPanel',
+      'mainNumberGapsPanel',
+      'bonusBallGapsPanel',
+      'currentGapChartPanel'
+    ]
   };
 
   let selectedState = null;
@@ -3783,10 +3798,12 @@ strong { font-weight: 700; }
 
   function initAccordions() {
     const saved = accordionPrefs();
+    const collapsedByDefault = new Set(['frequencyExplorerPanel', 'gapExplorerPanel', 'patternStatsPanel', 'customWeightedSetPanel', 'historicalDrawsPanel']);
     document.querySelectorAll('.accordion-card').forEach((card, index) => {
       const key = card.dataset.accordionKey || card.dataset.panelKey || card.closest('[data-panel-key]')?.dataset.panelKey || 'section-' + index;
       card.dataset.accordionKey = key;
-      const isOpen = saved[key] !== false;
+      const hasSaved = Object.prototype.hasOwnProperty.call(saved, key);
+      const isOpen = hasSaved ? saved[key] !== false : !collapsedByDefault.has(key);
       card.classList.toggle('open', isOpen);
       const button = card.querySelector('.accordion-button');
       if (button) {
